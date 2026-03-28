@@ -38,6 +38,46 @@ ${prompt}
 `;
 }
 
+// Dedicated wrapper for perfume database lookup (Fragrantica-style),
+// intentionally separate from formula/perfumer-generation instructions.
+function wrapPerfumeDatabasePrompt(prompt: string): string {
+  return `
+You are a fragrance encyclopedia and perfume database expert (like Fragrantica).
+
+CRITICAL RULES:
+1. Return ONLY valid JSON
+2. DO NOT invent perfumes — if unsure, return "found": false
+3. Prefer widely known designer or niche fragrances
+4. If data is uncertain (perfumer, year), return null instead of guessing
+5. Keep outputs realistic and consistent with known perfume data
+
+DATA MODELING RULES:
+- Notes should reflect commonly reported pyramids (top/middle/base)
+- Max 3–5 notes per layer
+- Accords should reflect dominant scent families (3–6 max)
+- Use standard accord terms: "woody", "floral", "fresh spicy", "amber", "citrus", etc.
+- Longevity and sillage must use standard categories:
+  - longevity: poor, moderate, long-lasting, very long-lasting
+  - sillage: soft, moderate, strong, enormous
+
+- Pricing realism:
+  - Designer: $60–150
+  - Niche: $120–350+
+
+- Availability:
+  - Use real retailers (Sephora, Nordstrom, brand site)
+
+- Description:
+  - Must describe scent evolution (opening → heart → dry down)
+
+IMPORTANT:
+If confidence is low, return:
+"found": false
+
+${prompt}
+`;
+}
+
 // Optimization guide helper
 function getOptimizationGuide(mode: OptimizationMode): string {
   const guides: Record<OptimizationMode, string> = {
@@ -406,4 +446,83 @@ Example:
 `;
 
   return wrapJSONPrompt(prompt, schema);
+}
+
+export function getPerfumeIntelligencePrompt(perfumeName: string): string {
+  return wrapPerfumeDatabasePrompt(`
+A user is searching for this perfume:
+"${perfumeName}"
+
+---
+
+IF FOUND:
+
+{
+  "found": true,
+  "confidence": "high|medium|low",
+
+  "perfume": {
+    "name": "string",
+    "brand": "string",
+    "releaseYear": "number or null",
+    "perfumer": "string or null",
+    "gender": "male|female|unisex",
+
+    "fragranceFamily": "string",
+    "accords": [
+      { "name": "woody", "strength": "dominant|prominent|subtle" }
+    ],
+
+    "notes": {
+      "top": ["string"],
+      "middle": ["string"],
+      "base": ["string"]
+    },
+
+    "performance": {
+      "longevity": "poor|moderate|long-lasting|very long-lasting",
+      "sillage": "soft|moderate|strong|enormous"
+    },
+
+    "description": "Opening → Heart → Dry down",
+
+    "pricing": {
+      "averageUSD": "number",
+      "size": "string"
+    },
+
+    "availability": [
+      {
+        "store": "Sephora",
+        "region": "US",
+        "url": "string"
+      }
+    ],
+
+    "community": {
+      "rating": 4.3,
+      "reviewsCount": 1200
+    }
+  },
+
+  "suggestions": []
+}
+
+---
+
+IF NOT FOUND:
+
+{
+  "found": false,
+  "confidence": "low",
+  "perfume": null,
+  "suggestions": [
+    {
+      "name": "string",
+      "brand": "string",
+      "reason": "why similar"
+    }
+  ]
+}
+`);
 }
