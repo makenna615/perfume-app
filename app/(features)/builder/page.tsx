@@ -78,7 +78,7 @@ export default function BuilderPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-perfume-accent to-purple-400 mb-6 opacity-20">
             <BeakerIcon className="w-8 h-8" />
           </div>
-          <h1 className="text-5xl md:text-6xl font-playfair font-bold mb-6 bg-gradient-to-r from-perfume-accent via-pale-purple to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-5xl md:text-6xl font-playfair font-bold mb-6 bg-gradient-to-r from-[#b148ff] via-[#9650ff] to-[#7a64ff] bg-clip-text text-transparent">
             Craft Your Signature Scent
           </h1>
           <p className="text-lg md:text-xl text-pale-purple/80 max-w-3xl mx-auto font-inter leading-relaxed">

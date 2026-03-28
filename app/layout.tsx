@@ -27,7 +27,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Scent Lab - Perfume Discovery & Creation",
+  title: "Memories Into Perfumes (MIP) - Perfume Discovery & Creation",
   description: "Discover similar perfumes, build your own formulas, and master fragrance ingredients with AI.",
 };
 
