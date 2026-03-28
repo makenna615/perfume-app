@@ -374,14 +374,14 @@ function extractReleaseYearFromFragranticaHtml(html: string, description: string
 function extractCommunityFromFragranticaHtml(
   html: string
 ): { rating: number; reviewsCount: number } | undefined {
-  const ratingValueMatch = html.match(/"ratingValue"\s*:\s*"?(?<rating>[0-5](?:\.\d+)?)"?/i);
+  const ratingValueMatch = html.match(/"ratingValue"\s*:\s*"?([0-5](?:\.\d+)?)"?/i);
   const countMatch = html.match(
-    /"(ratingCount|reviewCount)"\s*:\s*"?(?<count>[0-9][0-9,]*)"?/i
+    /"(ratingCount|reviewCount)"\s*:\s*"?([0-9][0-9,]*)"?/i
   );
 
-  if (ratingValueMatch?.groups?.rating && countMatch?.groups?.count) {
-    const rating = Number(ratingValueMatch.groups.rating);
-    const reviewsCount = Number(countMatch.groups.count.replace(/,/g, ""));
+  if (ratingValueMatch?.[1] && countMatch?.[2]) {
+    const rating = Number(ratingValueMatch[1]);
+    const reviewsCount = Number(countMatch[2].replace(/,/g, ""));
     if (!Number.isNaN(rating) && !Number.isNaN(reviewsCount) && reviewsCount > 0) {
       return { rating, reviewsCount };
     }
@@ -629,7 +629,7 @@ function sanitizeAccords(value: unknown): Array<{
         return null;
       }
       const obj = item as Record<string, unknown>;
-      const strength =
+      const strength: "dominant" | "prominent" | "subtle" =
         obj.strength === "dominant" || obj.strength === "prominent" || obj.strength === "subtle"
           ? obj.strength
           : "subtle";

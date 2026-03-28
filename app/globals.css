@@ -25,6 +25,10 @@ main, section, article {
   --border: #2d2d44;
   --accent: #8b5cf6;
   --accent-alt: #06b6d4;
+  --font-inter: "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", sans-serif;
+  --font-playfair: Georgia, "Times New Roman", serif;
+  --font-geist-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 html {
