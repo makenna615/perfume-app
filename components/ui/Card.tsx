@@ -2,13 +2,24 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  variant?: 'default' | 'luxury' | 'hover';
 }
 
-export default function Card({ children, className = "", onClick }: CardProps) {
+export default function Card({ children, className = "", onClick, variant = 'default' }: CardProps) {
+  const baseStyles = "rounded-2xl transition-all duration-200";
+  
+  const isClickable = onClick ? "cursor-pointer hover:border-perfume-accent/40" : "";
+
+  const variants = {
+    default: "gradient-card shadow-premium hover:shadow-luxury",
+    luxury: "card-luxury",
+    hover: "gradient-card-hover",
+  };
+
   return (
     <div
       onClick={onClick}
-      className={`gradient-card rounded-xl shadow-lg shadow-perfume-accent/5 hover:shadow-xl hover:shadow-perfume-accent/15 transition-all duration-300 cursor-pointer ${className}`}
+      className={`${baseStyles} ${variants[variant]} ${isClickable} ${className}`}
     >
       {children}
     </div>

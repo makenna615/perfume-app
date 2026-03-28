@@ -37,7 +37,9 @@ const config: Config = {
         'perfume-accent': '#8b5cf6',
       },
       fontFamily: {
-        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-inter)', 'var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+        playfair: ['var(--font-playfair)', 'serif'],
+        inter: ['var(--font-inter)', 'system-ui', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in',
@@ -46,6 +48,7 @@ const config: Config = {
         'slide-in-left': 'slideInLeft 0.5s ease-out',
         'scale-in': 'scaleIn 0.4s ease-out',
         'pulse-soft': 'pulseSoft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'shimmer': 'shimmer 2s infinite',
       },
       keyframes: {
         fadeIn: {
@@ -71,6 +74,10 @@ const config: Config = {
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '.8' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-1000px 0' },
+          '100%': { backgroundPosition: '1000px 0' },
         },
       },
       transitionTimingFunction: {

@@ -1,5 +1,5 @@
 interface EmptyStateProps {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   description: string;
   action?: {
@@ -15,14 +15,18 @@ export default function EmptyState({
   action,
 }: EmptyStateProps) {
   return (
-    <div className="text-center py-12">
-      <div className="text-6xl mb-4">{icon}</div>
-      <h3 className="text-xl font-bold text-pale-blue mb-2">{title}</h3>
-      <p className="text-pale-purple/70 max-w-sm mx-auto mb-6">{description}</p>
+    <div className="text-center py-16 px-4">
+      <div className="flex justify-center mb-6">
+        <div className="text-6xl md:text-7xl opacity-80 hover:opacity-100 transition-opacity duration-300">
+          {typeof icon === 'string' ? icon : icon}
+        </div>
+      </div>
+      <h3 className="text-2xl md:text-3xl font-playfair font-bold text-pale-blue mb-3">{title}</h3>
+      <p className="text-pale-purple/70 max-w-md mx-auto mb-8 font-inter text-lg leading-relaxed">{description}</p>
       {action && (
         <button
           onClick={action.onClick}
-          className="bg-perfume-accent hover:bg-perfume-accent/80 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+          className="bg-gradient-to-r from-perfume-accent via-pale-purple to-pale-blue border border-transparent hover:shadow-luxury shadow-premium text-white font-semibold py-3 px-8 rounded-2xl transition-all duration-200 hover:-translate-y-0.5"
         >
           {action.label}
         </button>

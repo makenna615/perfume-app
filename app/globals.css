@@ -1,7 +1,21 @@
 @import "tailwindcss";
 
-* {
-  @apply transition-[color,background-color,border-color] duration-300 ease-in-out;
+/* Avoid global transitions on every node; limit transitions to interactive elements. */
+:where(button, a, input, textarea, select, [role="button"]) {
+  @apply transition-[color,background-color,border-color,box-shadow,transform] duration-300 ease-in-out;
+}
+
+/* Performance optimizations */
+main, section, article {
+  contain: layout style paint;
+}
+
+/* GPU acceleration for animated elements */
+.will-change-transform,
+.will-change-opacity {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 :root {
@@ -21,12 +35,34 @@ body {
   background: linear-gradient(135deg, #0f0f1e 0%, #1a0f2e 50%, #0f1a2e 100%);
   color: #e8eef5;
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: var(--font-inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif);
 }
 
-/* Page transitions */
-main {
-  animation: fadeIn 0.5s ease-in;
+/* Playfair Display for headings */
+h1, h2, h3 {
+  font-family: var(--font-playfair, serif);
+  letter-spacing: -0.02em;
+}
+
+.font-playfair {
+  font-family: var(--font-playfair, serif);
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+h1 {
+  @apply text-4xl md:text-5xl lg:text-6xl font-bold;
+  font-family: var(--font-playfair, serif);
+}
+
+h2 {
+  @apply text-3xl md:text-4xl font-bold;
+  font-family: var(--font-playfair, serif);
+}
+
+h3 {
+  @apply text-xl md:text-2xl font-semibold;
+  font-family: var(--font-playfair, serif);
 }
 
 @keyframes fadeIn {
@@ -67,6 +103,26 @@ main {
   border: 1px solid rgba(139, 92, 246, 0.1);
 }
 
+.gradient-card-hover {
+  background: linear-gradient(135deg, #1a1a2e 0%, #252538 100%);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  transition: all 300ms ease-in-out;
+}
+
+.gradient-card-hover:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.2);
+}
+
+/* Premium shadows */
+.shadow-premium {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.shadow-luxury {
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 100px rgba(139, 92, 246, 0.1);
+}
+
 /* Glow effects */
 .glow-accent {
   box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
@@ -76,9 +132,93 @@ main {
   box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
 }
 
+.glow-green {
+  box-shadow: 0 0 20px rgba(58, 166, 85, 0.3);
+}
+
 /* Backdrop blur */
 .backdrop-blur-sm {
   backdrop-filter: blur(4px);
 }
 
+/* Shimmer loading animation */
+.animate-shimmer {
+  background: linear-gradient(90deg, #1a1a2e 25%, #252538 50%, #1a1a2e 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Luxury card styles */
+.card-luxury {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(45, 45, 68, 0.3);
+  background: linear-gradient(to bottom right, rgba(26, 26, 46, 0.4), rgba(26, 26, 46, 0.2));
+  backdrop-filter: blur(40px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: all 300ms ease-in-out;
+}
+
+.card-luxury:hover {
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 100px rgba(139, 92, 246, 0.1);
+}
+
+.card-luxury::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top right, transparent 0%, rgba(139, 92, 246, 0.05) 50%, transparent 100%);
+  pointer-events: none;
+  content: '';
+}
+
+/* Lighter modal styling path for better popup performance while keeping contrast. */
+.modal-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgba(88, 98, 140, 0.55);
+  background-color: #171a2d;
+  background-image: linear-gradient(
+    145deg,
+    rgba(108, 126, 231, 0.12) 0%,
+    rgba(79, 157, 216, 0.08) 40%,
+    rgba(23, 26, 45, 1) 100%
+  );
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(108, 126, 231, 0.2) inset;
+}
+
+.modal-panel::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top right, transparent 0%, rgba(139, 92, 246, 0.04) 50%, transparent 100%);
+  pointer-events: none;
+  content: '';
+}
+
+/* Text gradients */
+.text-gradient {
+  background: linear-gradient(to right, #4f9dd9, #8b5cf6, #3aa655);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-luxury {
+  background: linear-gradient(to right, #8b5cf6, #4f9dd9, #3aa655);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 
