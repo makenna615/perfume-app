@@ -70,22 +70,6 @@ lib/
   hooks/
 ```
 
-## Environment Variables
-
-Create `.env.local`:
-
-```env
-OPENAI_API_KEY=your_openai_key
-OPENAI_MODEL=gpt-4.1-mini
-APP_PASSWORD=your_app_password
-SESSION_SECRET=your_long_random_secret
-```
-
-Notes:
-- `APP_PASSWORD` is required for login.
-- `SESSION_SECRET` should be a long random secret for signing auth session tokens.
-- Do not commit real secrets.
-
 ## Local Development
 
 ```bash
@@ -101,27 +85,3 @@ Open `http://localhost:3000`.
 npm run lint
 npm run build
 ```
-
-## Security Model
-
-- All routes are gated by `proxy.ts` except:
-  - `/login`
-  - static assets
-  - `/api/auth/login`
-  - `/api/auth/logout`
-- Auth uses signed, `httpOnly` session cookie (`auth_session`).
-- API keys are server-side only.
-
-## Deployment (Vercel)
-
-1. Import repo into Vercel
-2. Set environment variables (`OPENAI_API_KEY`, `APP_PASSWORD`, `SESSION_SECRET`, optional `OPENAI_MODEL`)
-3. Deploy
-4. Verify:
-   - unauthenticated users are redirected to `/login`
-   - protected API routes return `401` without session
-
-## Known Notes
-
-- Perfume intelligence attempts Fragrantica-first parsing for real-world perfume details, with AI fallback when source parsing is incomplete.
-- If a perfume title is ambiguous across brands, the API returns options instead of guessing.
