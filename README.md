@@ -1,36 +1,127 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Memories Into Perfumes (MIP)
 
-## Getting Started
+AI-powered perfume app for discovery, formula generation, ingredient intelligence, and Fragrantica-style perfume lookup.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Discover similar perfumes by:
+  - perfume name
+  - scent notes
+- Perfume Details mode:
+  - Fragrantica-first lookup
+  - note pyramid (top/middle/base)
+  - accords, release year, community rating/review count when available
+  - ambiguity handling for same-name perfumes across brands
+- DIY Perfume Builder:
+  - `By Vibe`
+  - `By Ingredients`
+  - `By Inspiration`
+  - optimization modes: balanced, longevity, projection
+  - formula visualization + scaling support
+- Ingredient Intelligence:
+  - ingredient search
+  - role/volatility/usage
+  - supplier and substitute support
+- App-level password protection for pages + API routes (session cookie auth)
+
+## Tech Stack
+
+- Framework: Next.js `16` (App Router)
+- Language: TypeScript
+- UI: React `19`, Tailwind CSS `4`
+- Motion/Icons/Charts:
+  - Framer Motion
+  - Heroicons
+  - Recharts
+- AI: OpenAI Node SDK (`openai`)
+- Auth Gate: `proxy.ts` + signed cookie session (`lib/auth/session.ts`)
+
+## Project Structure
+
+```txt
+app/
+  (features)/
+    builder/page.tsx
+    discover/page.tsx
+    ingredients/page.tsx
+  api/
+    auth/login/route.ts
+    auth/logout/route.ts
+    builder/generate/route.ts
+    ingredients/search/route.ts
+    perfumes/search/route.ts
+    perfume-intelligence/route.ts
+    generateFormula/route.ts
+  login/page.tsx
+  layout.tsx
+  page.tsx
+
+components/
+  features/
+  layout/
+  ui/
+
+lib/
+  ai/
+    prompts.ts
+    openai-service.ts
+    factory.ts
+  auth/session.ts
+  hooks/
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `.env.local`:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+OPENAI_API_KEY=your_openai_key
+OPENAI_MODEL=gpt-4.1-mini
+APP_PASSWORD=your_app_password
+SESSION_SECRET=your_long_random_secret
+```
 
-## Learn More
+Notes:
+- `APP_PASSWORD` is required for login.
+- `SESSION_SECRET` should be a long random secret for signing auth session tokens.
+- Do not commit real secrets.
 
-To learn more about Next.js, take a look at the following resources:
+## Local Development
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open `http://localhost:3000`.
 
-## Deploy on Vercel
+## Build & Lint
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run lint
+npm run build
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Security Model
+
+- All routes are gated by `proxy.ts` except:
+  - `/login`
+  - static assets
+  - `/api/auth/login`
+  - `/api/auth/logout`
+- Auth uses signed, `httpOnly` session cookie (`auth_session`).
+- API keys are server-side only.
+
+## Deployment (Vercel)
+
+1. Import repo into Vercel
+2. Set environment variables (`OPENAI_API_KEY`, `APP_PASSWORD`, `SESSION_SECRET`, optional `OPENAI_MODEL`)
+3. Deploy
+4. Verify:
+   - unauthenticated users are redirected to `/login`
+   - protected API routes return `401` without session
+
+## Known Notes
+
+- Perfume intelligence attempts Fragrantica-first parsing for real-world perfume details, with AI fallback when source parsing is incomplete.
+- If a perfume title is ambiguous across brands, the API returns options instead of guessing.
