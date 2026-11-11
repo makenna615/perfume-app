@@ -70,6 +70,19 @@ lib/
   hooks/
 ```
 
+## Environment
+
+```bash
+OPENAI_API_KEY=...            # required (falls back to mock data without it)
+OPENAI_MODEL=gpt-5.4-mini     # optional; default. gpt-5.5 is the most accurate but ~2-3x slower
+OPENAI_REASONING_EFFORT=low   # optional; for gpt-5.x models (low | medium | high)
+AI_PROVIDER=openai            # or "mock" for offline development
+APP_PASSWORD=...
+SESSION_SECRET=...
+```
+
+All prompts live in `lib/ai/prompts.ts`. They share a perfumery reference block (notes vs. materials, usage levels, IFRA flags) and strict accuracy rules: the model returns null rather than guessing, and is never asked for prices, stock, ratings or URLs.
+
 ## Local Development
 
 ```bash

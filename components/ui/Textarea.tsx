@@ -1,33 +1,23 @@
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
-  error?: string;
   helperText?: string;
 }
 
-export default function Textarea({
-  label,
-  error,
-  helperText,
-  className = "",
-  ...props
-}: TextareaProps) {
+export default function Textarea({ label, helperText, className = "", id, ...props }: TextareaProps) {
+  const inputId = id ?? (label ? `textarea-${label.replace(/\W+/g, "-").toLowerCase()}` : undefined);
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-semibold text-pale-blue mb-3 tracking-wide">
+        <label htmlFor={inputId} className="eyebrow mb-2 block">
           {label}
         </label>
       )}
       <textarea
-        className={`w-full px-5 py-3.5 border rounded-2xl focus:ring-2 focus:outline-none transition-all resize-none bg-perfume-surface/40 backdrop-blur placeholder-pale-purple/30 text-pale-blue/90 font-inter shadow-premium ${
-          error
-            ? "border-red-500/40 focus:ring-red-500/20 focus:border-red-500"
-            : "border-slate-700/40 focus:ring-perfume-accent/20 focus:border-perfume-accent hover:border-perfume-accent/40"
-        } ${className}`}
+        id={inputId}
+        className={`w-full resize-none rounded-sm border border-line-strong bg-card px-4 py-3 font-display text-xl leading-snug text-ink outline-none transition-colors focus:border-ink focus-visible:outline-none ${className}`}
         {...props}
       />
-      {error && <p className="text-red-400 text-sm mt-2 font-medium">{error}</p>}
-      {helperText && <p className="text-slate-400 text-sm mt-2">{helperText}</p>}
+      {helperText && <p className="mt-2 text-xs text-ink-faint">{helperText}</p>}
     </div>
   );
 }

@@ -2,40 +2,23 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { SparklesIcon } from "@heroicons/react/24/solid";
+import { useState } from "react";
 import PerfumeLogoIcon from "@/components/ui/PerfumeLogoIcon";
+
+const links = [
+  { href: "/discover", label: "Discover", numeral: "I" },
+  { href: "/builder", label: "Compose", numeral: "II" },
+  { href: "/ingredients", label: "Materials", numeral: "III" },
+];
 
 export default function Navigation() {
   const router = useRouter();
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
-  const links = [
-    {
-      href: "/",
-      label: "Home",
-      activeGradient: "from-[#5f7de5] to-pale-blue",
-      hoverStyles: "hover:text-pale-blue hover:border-pale-blue/40 hover:bg-pale-blue/10",
-    },
-    {
-      href: "/discover",
-      label: "Discover",
-      activeGradient: "from-[#4f9dd8] to-cyan-400",
-      hoverStyles: "hover:text-cyan-200 hover:border-cyan-300/40 hover:bg-cyan-400/10",
-    },
-    {
-      href: "/builder",
-      label: "Builder",
-      activeGradient: "from-[#b148ff] via-[#9650ff] to-[#7a64ff]",
-      hoverStyles: "hover:text-purple-100 hover:border-purple-300/50 hover:bg-gradient-to-r hover:from-perfume-accent/30 hover:to-purple-400/25",
-    },
-    {
-      href: "/ingredients",
-      label: "Ingredients",
-      activeGradient: "from-[#46a1a3] to-emerald-400",
-      hoverStyles: "hover:text-emerald-200 hover:border-emerald-300/40 hover:bg-emerald-400/10",
-    },
-  ];
+  if (pathname === "/login") {
+    return null;
+  }
 
   const handleLogout = async () => {
     try {
@@ -47,55 +30,80 @@ export default function Navigation() {
   };
 
   return (
-    <nav className="sticky top-0 z-40 bg-perfume-dark/75 backdrop-blur-md border-b border-slate-700/30 shadow-lg shadow-perfume-accent/5">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-18 items-center py-4">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="transition-transform duration-200 group-hover:scale-105">
-              <PerfumeLogoIcon className="w-9 h-9" />
-            </div>
-            <div className="font-playfair font-bold text-xl tracking-wide text-white transition-colors duration-200 group-hover:text-pale-blue">
-              MIP
-            </div>
-          </Link>
+    <header className="sticky top-0 z-40 border-b border-line bg-paper/90 backdrop-blur-sm">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+        <Link href="/" className="group flex items-center gap-3" onClick={() => setOpen(false)}>
+          <PerfumeLogoIcon className="h-8 w-8 text-ink transition-colors group-hover:text-resin" />
+          <span className="font-display text-xl leading-none tracking-tight">
+            Memories <span className="italic text-ink-soft">into</span> Perfumes
+          </span>
+        </Link>
 
-          <div className="hidden md:flex gap-2 items-center">
+        <nav className="hidden items-center gap-8 md:flex" aria-label="Main">
+          {links.map((link) => {
+            const active = pathname.startsWith(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? "page" : undefined}
+                className={`group relative flex items-baseline gap-1.5 py-1 text-sm transition-colors ${
+                  active ? "text-ink" : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                <span className="font-display text-xs italic text-ink-faint">{link.numeral}</span>
+                {link.label}
+                <span
+                  className={`absolute -bottom-0.5 left-0 h-px bg-resin transition-all ${
+                    active ? "w-full" : "w-0 group-hover:w-full"
+                  }`}
+                />
+              </Link>
+            );
+          })}
+          <button
+            onClick={handleLogout}
+            className="cursor-pointer text-sm text-ink-faint transition-colors hover:text-ink"
+          >
+            Log out
+          </button>
+        </nav>
+
+        <button
+          className="flex h-10 w-10 cursor-pointer flex-col items-center justify-center gap-1.5 md:hidden"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="mobile-nav"
+          aria-label={open ? "Close menu" : "Open menu"}
+        >
+          <span className={`h-px w-5 bg-ink transition-transform ${open ? "translate-y-[3.5px] rotate-45" : ""}`} />
+          <span className={`h-px w-5 bg-ink transition-transform ${open ? "-translate-y-[3.5px] -rotate-45" : ""}`} />
+        </button>
+      </div>
+
+      {open && (
+        <nav id="mobile-nav" className="border-t border-line bg-paper md:hidden" aria-label="Main">
+          <ul className="mx-auto max-w-6xl px-5 py-2">
             {links.map((link) => (
-              <motion.div key={link.href} whileHover={{ y: -2 }} transition={{ duration: 0.3 }}>
+              <li key={link.href}>
                 <Link
                   href={link.href}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 font-inter cursor-pointer ${
-                    pathname === link.href
-                      ? `bg-gradient-to-r ${link.activeGradient} text-white shadow-luxury`
-                      : `border border-slate-700/40 text-pale-purple/80 ${link.hoverStyles}`
-                  }`}
+                  onClick={() => setOpen(false)}
+                  className="flex items-baseline gap-3 border-b border-line py-4 font-display text-2xl"
                 >
+                  <span className="w-6 text-sm italic text-ink-faint">{link.numeral}</span>
                   {link.label}
                 </Link>
-              </motion.div>
+              </li>
             ))}
-
-            <motion.button
-              whileHover={{ y: -2 }}
-              transition={{ duration: 0.3 }}
-              onClick={handleLogout}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 font-inter cursor-pointer border border-slate-600/70 text-pale-purple/80 hover:text-white hover:border-perfume-accent/80 hover:bg-gradient-to-r hover:from-perfume-accent/30 hover:to-pale-blue/20"
-            >
-              Log out
-            </motion.button>
-          </div>
-
-          <div className="md:hidden">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              className="p-2 rounded-lg hover:bg-perfume-surface/50"
-            >
-              <SparklesIcon className="w-6 h-6 text-pale-green" />
-            </motion.button>
-          </div>
-        </div>
-      </div>
-    </nav>
+            <li>
+              <button onClick={handleLogout} className="cursor-pointer py-4 text-sm text-ink-faint">
+                Log out
+              </button>
+            </li>
+          </ul>
+        </nav>
+      )}
+    </header>
   );
 }

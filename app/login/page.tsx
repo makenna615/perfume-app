@@ -1,37 +1,50 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Card from "@/components/ui/Card";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
+import PerfumeLogoIcon from "@/components/ui/PerfumeLogoIcon";
+
+/** Only allow same-origin paths after login (blocks "//evil.com" and "/\evil.com"). */
+function isSafeRedirect(candidate: string | null): candidate is string {
+  if (!candidate || !candidate.startsWith("/")) return false;
+  try {
+    return new URL(candidate, window.location.origin).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
 
 export default function LoginPage() {
+  // useSearchParams must sit under a Suspense boundary for static prerendering.
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nextPath, setNextPath] = useState("/");
-  const [configError, setConfigError] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const candidate = params.get("next");
-    setNextPath(candidate && candidate.startsWith("/") ? candidate : "/");
-    setConfigError(params.get("error") === "config");
-  }, []);
+  const configError = params.get("error") === "config";
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const candidate = params.get("next");
+    const nextPath = isSafeRedirect(candidate) ? candidate : "/";
     setError(null);
     setLoading(true);
 
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
 
@@ -50,41 +63,34 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <Card variant="luxury" className="w-full max-w-md p-8">
-        <h1 className="text-3xl font-playfair font-bold text-pale-blue mb-2">App Access</h1>
-        <p className="text-pale-purple/80 mb-6">
-          Enter your app password to continue.
-        </p>
+    <div className="flex min-h-[80vh] items-center justify-center px-5">
+      <div className="w-full max-w-sm animate-rise">
+        <PerfumeLogoIcon className="mb-8 h-10 w-10 text-ink" />
+        <p className="eyebrow mb-3">Private studio</p>
+        <h1 className="text-5xl">
+          Memories <em className="text-ink-soft">into</em> Perfumes
+        </h1>
+        <p className="mt-4 text-ink-soft">Enter the studio password to continue.</p>
 
-        {configError && (
-          <p className="mb-4 text-sm text-red-400">
-            Server is missing APP_PASSWORD configuration.
-          </p>
-        )}
+        <div className="mt-6 space-y-3">
+          {configError && <Notice tone="error">The server is missing its APP_PASSWORD configuration.</Notice>}
+          {error && <Notice tone="error">{error}</Notice>}
+        </div>
 
-        {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-6">
           <Input
             label="Password"
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Enter app password"
+            autoComplete="current-password"
+            autoFocus
           />
-
-          <Button
-            type="submit"
-            variant="luxury"
-            className="w-full !border-0"
-            disabled={!password || loading}
-            isLoading={loading}
-          >
-            Unlock App
+          <Button type="submit" size="lg" className="w-full" disabled={!password} isLoading={loading}>
+            Enter
           </Button>
         </form>
-      </Card>
+      </div>
     </div>
   );
 }

@@ -1,109 +1,111 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ApiResponse, Perfume } from "@/types";
+import { ApiResponse, SimilarPerfume, SimilarRelationship, SimilarSearchResult } from "@/types";
 import { getAIService } from "@/lib/ai/factory";
-import { getSimilarPerfumesPrompt, getNotesSimilarityPrompt } from "@/lib/ai/prompts";
+import { getNotesSimilarityPrompt, getSimilarPerfumesPrompt } from "@/lib/ai/prompts";
+import { AIServiceError } from "@/lib/ai/types";
+import {
+  MAX_INPUT_LENGTH,
+  PRICE_TIERS,
+  num,
+  obj,
+  oneOf,
+  slug,
+  str,
+  strArr,
+  year,
+} from "@/lib/ai/sanitize";
 
-interface ParsedPerfumeResult {
-  name?: string;
-  brand?: string;
-  matchPercentage?: number;
-  sharedNotes?: string[];
-  matchingNotes?: string[];
-  explanation?: string;
-}
+const RELATIONSHIPS: readonly SimilarRelationship[] = [
+  "dupe",
+  "close-alternative",
+  "flanker",
+  "same-family",
+];
 
-interface ParsedPerfumeResponse {
-  similarPerfumes?: ParsedPerfumeResult[];
-  matchingPerfumes?: ParsedPerfumeResult[];
+function sanitize(raw: Record<string, unknown>): SimilarSearchResult {
+  const ref = obj(raw.reference);
+  const reference =
+    ref && str(ref.name)
+      ? {
+          name: str(ref.name, 120)!,
+          brand: str(ref.brand, 120) ?? "",
+          concentration: str(ref.concentration, 40),
+          releaseYear: year(ref.releaseYear),
+          fragranceFamily: str(ref.fragranceFamily, 60),
+          keyNotes: strArr(ref.keyNotes, 8),
+          character: str(ref.character, 300),
+        }
+      : null;
+
+  const seen = new Set<string>();
+  const results: SimilarPerfume[] = (Array.isArray(raw.results) ? raw.results : [])
+    .map(obj)
+    .filter((item): item is Record<string, unknown> => Boolean(item && str(item.name)))
+    .map((item) => {
+      const name = str(item.name, 120)!;
+      const brand = str(item.brand, 120) ?? "";
+      return {
+        id: slug(`${brand}-${name}`),
+        name,
+        brand,
+        relationship: oneOf(item.relationship, RELATIONSHIPS) ?? "same-family",
+        matchPercentage: Math.round(num(item.matchPercentage, 0, 100) ?? 0),
+        priceTier: oneOf(item.priceTier, PRICE_TIERS),
+        sharedNotes: strArr(item.sharedNotes, 8),
+        keyDifference: str(item.keyDifference, 300),
+        explanation: str(item.explanation, 400) ?? "",
+      };
+    })
+    // Drop duplicates and the reference perfume itself.
+    .filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return !(reference && item.name.toLowerCase() === reference.name.toLowerCase() && item.brand.toLowerCase() === reference.brand.toLowerCase());
+    })
+    .sort((a, b) => b.matchPercentage - a.matchPercentage);
+
+  return { found: raw.found !== false && results.length > 0, reference, results };
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { query, searchType } = await request.json();
+    const body = (await request.json()) as { query?: unknown; searchType?: unknown };
+    const query = typeof body.query === "string" ? body.query.trim().slice(0, MAX_INPUT_LENGTH) : "";
+    const searchType = body.searchType;
 
-    if (!query || !searchType) {
+    if (!query || (searchType !== "perfume" && searchType !== "notes")) {
       return NextResponse.json(
-        { success: false, error: "Query and searchType are required" } as ApiResponse<null>,
+        { success: false, error: "A query and a valid searchType are required." } as ApiResponse<null>,
         { status: 400 }
       );
     }
 
-    const aiService = getAIService();
-    let aiResponse: string;
+    const promptPair =
+      searchType === "perfume"
+        ? getSimilarPerfumesPrompt(query)
+        : getNotesSimilarityPrompt(
+            query
+              .split(",")
+              .map((note) => note.trim())
+              .filter(Boolean)
+              .slice(0, 12)
+          );
 
-    if (searchType === "perfume") {
-      const prompt = getSimilarPerfumesPrompt(query);
-      aiResponse = await aiService.generateSimilarPerfumes(prompt);
-    } else if (searchType === "notes") {
-      const notes = query.split(",").map((n: string) => n.trim());
-      const prompt = getNotesSimilarityPrompt(notes);
-      aiResponse = await aiService.generateSimilarPerfumes(prompt);
-    } else {
-      return NextResponse.json(
-        { success: false, error: "Invalid searchType" } as ApiResponse<null>,
-        { status: 400 }
-      );
-    }
+    const raw = await getAIService().generateJSON({
+      task: searchType === "perfume" ? "similar-perfumes" : "notes-search",
+      ...promptPair,
+    });
 
-    let parsed: ParsedPerfumeResponse;
-    try {
-      parsed = JSON.parse(aiResponse) as ParsedPerfumeResponse;
-    } catch {
-      console.error("Failed to parse AI response:", aiResponse);
-      return NextResponse.json(
-        { success: false, error: "Invalid response format from AI" } as ApiResponse<null>,
-        { status: 500 }
-      );
-    }
-
-    let results: ParsedPerfumeResult[] = [];
-
-    if (searchType === "perfume") {
-      results = Array.isArray(parsed.similarPerfumes) ? parsed.similarPerfumes : [];
-    } else if (searchType === "notes") {
-      results = Array.isArray(parsed.matchingPerfumes) ? parsed.matchingPerfumes : [];
-    }
-
-    if (!Array.isArray(results)) {
-      results = [];
-    }
-
-    // Map results to Perfume type with validation
-    const mappedResults: Perfume[] = results
-      .filter((result) => result && typeof result === "object")
-      .map((result, index: number) => {
-        const allNotes = Array.isArray(result.sharedNotes) 
-          ? result.sharedNotes 
-          : Array.isArray(result.matchingNotes) 
-          ? result.matchingNotes 
-          : [];
-
-        // Distribute notes across top/middle/base for realistic display
-        const topNotes = allNotes.slice(0, 2);
-        const middleNotes = allNotes.slice(2, 4);
-        const baseNotes = allNotes.slice(4, 6);
-
-        return {
-          id: `perfume-${index}-${Date.now()}`,
-          name: String(result.name || "Unknown Perfume"),
-          brand: String(result.brand || "Unknown Brand"),
-          topNotes,
-          middleNotes,
-          baseNotes,
-          description: String(result.explanation || ""),
-          similarityScore: Math.min(100, Math.max(0, Number(result.matchPercentage) || 0)),
-        };
-      });
-
-    return NextResponse.json({
-      success: true,
-      data: mappedResults,
-    } as ApiResponse<Perfume[]>);
+    return NextResponse.json({ success: true, data: sanitize(raw) } as ApiResponse<SimilarSearchResult>);
   } catch (error) {
-    console.error("Search error:", error);
+    console.error("Perfume search error:", error);
+    const status = error instanceof AIServiceError ? error.status : 500;
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Internal server error" } as ApiResponse<null>,
-      { status: 500 }
+      {
+        success: false,
+        error: error instanceof AIServiceError ? error.message : "Search failed. Please try again.",
+      } as ApiResponse<null>,
+      { status }
     );
   }
 }

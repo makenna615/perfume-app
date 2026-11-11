@@ -1,59 +1,129 @@
-export interface ScentNote {
-  name: string;
-  type: "top" | "middle" | "base";
-  description?: string;
-}
-
-export interface Perfume {
-  id: string;
-  name: string;
-  brand: string;
-  topNotes: string[];
-  middleNotes: string[];
-  baseNotes: string[];
-  description?: string;
-  similarityScore?: number;
-}
-
-export interface Ingredient {
-  id: string;
-  name: string;
-  scentProfile: string[];
-  role: "top" | "middle" | "base";
-  typicalUsagePercent: number;
-  volatility: "high" | "medium" | "low";
-  description?: string;
-  substitutes?: string[];
-  supplier?: {
-    name: string;
-    price?: number; // USD per 100ml
-    availability?: "in-stock" | "limited" | "backordered";
-    link?: string;
-  };
-}
-
-export interface Formula {
-  id?: string;
-  name: string;
-  ingredients: FormulaIngredient[];
-  inspiration?: string;
-  optimizationMode?: "balanced" | "longevity" | "projection";
-  baseVolume?: number; // ml
-  createdAt?: Date;
-}
-
-export interface FormulaIngredient {
-  ingredientId: string;
-  ingredientName: string;
-  percentage: number;
-  role?: "top" | "middle" | "base";
-}
+export type NoteRole = "top" | "middle" | "base";
+export type CostTier = "low" | "medium" | "high" | "very-high";
+export type PriceTier = "budget" | "designer" | "niche" | "luxury";
+export type Confidence = "high" | "medium" | "low";
 
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+export type SimilarRelationship = "dupe" | "close-alternative" | "flanker" | "same-family";
+
+export interface SimilarPerfume {
+  id: string;
+  name: string;
+  brand: string;
+  relationship: SimilarRelationship;
+  matchPercentage: number;
+  priceTier?: PriceTier;
+  sharedNotes: string[];
+  keyDifference?: string;
+  explanation: string;
+}
+
+export interface SimilarReference {
+  name: string;
+  brand: string;
+  concentration?: string;
+  releaseYear?: number;
+  fragranceFamily?: string;
+  keyNotes: string[];
+  character?: string;
+}
+
+export interface SimilarSearchResult {
+  found: boolean;
+  reference: SimilarReference | null;
+  results: SimilarPerfume[];
+}
+
+// ---------------------------------------------------------------------------
+// Materials library
+// ---------------------------------------------------------------------------
+
+export interface Material {
+  id: string;
+  name: string;
+  otherNames: string[];
+  type: "natural" | "synthetic" | "natural isolate" | "specialty base";
+  family?: string;
+  scentProfile: string[];
+  description: string;
+  role: NoteRole;
+  volatility: "high" | "medium" | "low";
+  tenacity?: string;
+  typicalUsage?: string;
+  typicalUsagePercent?: number;
+  recommendedDilution?: string;
+  safety?: string;
+  allergens: string[];
+  pairsWith: string[];
+  substitutes: string[];
+  foundIn: Array<{ name: string; brand: string }>;
+  costTier?: CostTier;
+}
+
+export interface MaterialSearchResult {
+  query: string;
+  interpretation?: string;
+  materials: Material[];
+}
+
+// ---------------------------------------------------------------------------
+// Formula builder
+// ---------------------------------------------------------------------------
+
+export type OptimizationMode = "balanced" | "longevity" | "projection";
+export type BuilderMode = "vibe" | "ingredients" | "inspired";
+
+export interface FormulaIngredient {
+  ingredientId: string;
+  ingredientName: string;
+  percentage: number;
+  role?: NoteRole;
+  dilution?: string;
+  reason?: string;
+  substitutes?: string[];
+  costTier?: CostTier;
+  safetyNote?: string;
+}
+
+export interface Formula {
+  id?: string;
+  name: string;
+  mode?: BuilderMode;
+  input?: string;
+  concept?: string;
+  olfactiveFamily?: string;
+  description?: string;
+  ingredients: FormulaIngredient[];
+  inspiration?: string;
+  optimizationMode?: OptimizationMode;
+  timeline?: { opening?: string; heart?: string; drydown?: string };
+  recommendedConcentration?: { type: string; percent: number; why?: string };
+  maceration?: string;
+  tips: string[];
+  warnings: string[];
+  suggestedAdditions?: Array<{ name: string; role?: NoteRole; why?: string }>;
+  reference?: {
+    name: string;
+    brand?: string;
+    notes: { top: string[]; middle: string[]; base: string[] };
+    confidence?: Confidence;
+  };
+  keyDifferences?: string[];
+  createdAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Perfume details ("intelligence")
+// ---------------------------------------------------------------------------
 
 export interface PerfumeIntelligenceAvailability {
   store: string;
@@ -66,16 +136,12 @@ export interface PerfumeIntelligencePerformance {
   sillage: "soft" | "moderate" | "strong" | "enormous";
 }
 
-export interface PerfumeIntelligencePricing {
-  averageUSD: number;
-  size: string;
-}
-
 export interface PerfumeIntelligenceDetails {
   name: string;
   brand: string;
+  concentration?: string;
   releaseYear?: number;
-  perfumer?: string;
+  perfumers: string[];
   gender?: "male" | "female" | "unisex";
   fragranceFamily?: string;
   accords: Array<{
@@ -83,18 +149,25 @@ export interface PerfumeIntelligenceDetails {
     strength: "dominant" | "prominent" | "subtle";
   }>;
   description: string;
+  notesStructure: "pyramid" | "linear";
   notes: {
     top: string[];
     middle: string[];
     base: string[];
   };
   performance?: PerfumeIntelligencePerformance;
-  pricing?: PerfumeIntelligencePricing;
+  seasons: string[];
+  occasions: string[];
+  priceTier?: PriceTier;
+  /** Search links generated by the app — never model-generated URLs. */
   availability: PerfumeIntelligenceAvailability[];
   community?: {
     rating: number;
     reviewsCount: number;
   };
+  /** Where the note pyramid came from. */
+  source: "fragrantica" | "ai";
+  sourceUrl?: string;
 }
 
 export interface PerfumeIntelligenceSuggestion {
@@ -105,8 +178,10 @@ export interface PerfumeIntelligenceSuggestion {
 
 export interface PerfumeIntelligenceResponse {
   found: boolean;
-  confidence?: "high" | "medium" | "low";
+  confidence?: Confidence;
   ambiguous?: boolean;
   perfume: PerfumeIntelligenceDetails | null;
+  /** Perfumes from other brands sharing this name — shown alongside a found result. */
+  alternatives: PerfumeIntelligenceSuggestion[];
   suggestions: PerfumeIntelligenceSuggestion[];
 }

@@ -3,15 +3,10 @@ import { authCookieName, verifySessionToken } from "@/lib/auth/session";
 
 const PUBLIC_PATHS = new Set(["/login"]);
 
+// Only Next's own build assets and the favicon skip the login check.
+// (A broad "any path ending in .js/.css/.txt…" rule is easy to abuse to skip auth.)
 function isStaticAsset(pathname: string): boolean {
-  return (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon.ico") ||
-    pathname.startsWith("/icons") ||
-    pathname.startsWith("/images") ||
-    pathname.match(/\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt|xml|woff2?)$/i) !==
-      null
-  );
+  return pathname.startsWith("/_next/") || pathname === "/favicon.ico";
 }
 
 export async function proxy(request: NextRequest) {

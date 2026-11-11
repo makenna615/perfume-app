@@ -28,15 +28,32 @@ function base64UrlToBytes(value: string): Uint8Array {
   return bytes;
 }
 
-async function signPayload(payload: string): Promise<string> {
-  const keyData = new TextEncoder().encode(getSessionSecret());
-  const key = await crypto.subtle.importKey(
+function importKey(): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
     "raw",
-    keyData,
+    new TextEncoder().encode(getSessionSecret()),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
+}
+
+/**
+ * Compares two strings without short-circuiting, so response time doesn't reveal
+ * how many leading characters of a forged signature were correct. Written by hand
+ * (not crypto.subtle.verify) because it must also work inside the proxy sandbox.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  let diff = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
+async function signPayload(payload: string): Promise<string> {
+  const key = await importKey();
   const signature = await crypto.subtle.sign(
     "HMAC",
     key,
@@ -64,12 +81,12 @@ export async function verifySessionToken(token?: string): Promise<boolean> {
     return false;
   }
 
-  const expectedSig = await signPayload(payloadEncoded);
-  if (expectedSig !== providedSig) {
-    return false;
-  }
-
   try {
+    const expectedSig = await signPayload(payloadEncoded);
+    if (!constantTimeEqual(expectedSig, providedSig)) {
+      return false;
+    }
+
     const payload = JSON.parse(
       new TextDecoder().decode(base64UrlToBytes(payloadEncoded))
     ) as { exp?: number };

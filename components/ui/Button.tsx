@@ -1,48 +1,75 @@
+import Link from "next/link";
+
+type Variant = "primary" | "secondary" | "ghost";
+type Size = "sm" | "md" | "lg";
+
+const base =
+  "inline-flex items-center justify-center gap-2 rounded-full font-medium whitespace-nowrap transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const variants: Record<Variant, string> = {
+  primary: "bg-ink text-paper hover:bg-resin-deep",
+  secondary: "border border-line-strong text-ink hover:border-ink hover:bg-card",
+  ghost: "text-ink-soft hover:text-ink hover:bg-paper-deep",
+};
+
+const sizes: Record<Size, string> = {
+  sm: "h-8 px-3.5 text-sm",
+  md: "h-10 px-5 text-sm",
+  lg: "h-12 px-7 text-base",
+};
+
+export function buttonClass(variant: Variant = "primary", size: Size = "md", className = "") {
+  return `${base} ${variants[variant]} ${sizes[size]} ${className}`;
+}
+
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "outline" | "luxury";
-  size?: "sm" | "md" | "lg";
+  variant?: Variant;
+  size?: Size;
   isLoading?: boolean;
-  children: React.ReactNode;
 }
 
 export default function Button({
   variant = "primary",
   size = "md",
   isLoading = false,
-  children,
-  disabled,
   className = "",
+  disabled,
+  children,
   ...props
 }: ButtonProps) {
-  const baseStyles =
-    "font-semibold rounded-2xl border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-perfume-accent disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap will-change-transform cursor-pointer inline-flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0";
-
-  const sizeStyles = {
-    sm: "px-4 py-2 text-sm",
-    md: "px-6 py-3 text-base",
-    lg: "px-8 py-4 text-lg tracking-wide",
-  };
-
-  const variantStyles = {
-    primary:
-      "border-transparent bg-gradient-to-r from-perfume-accent via-pale-purple to-pale-blue shadow-premium text-white tracking-wide hover:shadow-luxury hover:brightness-110 active:brightness-95",
-    secondary:
-      "border-slate-500/70 bg-gradient-to-r from-perfume-surface via-perfume-accent/25 to-pale-blue/25 text-pale-blue hover:border-perfume-accent/80 hover:shadow-lg hover:shadow-perfume-accent/25 hover:brightness-110 active:opacity-90",
-    outline:
-      "border-perfume-accent/80 bg-gradient-to-r from-perfume-accent/25 via-pale-purple/25 to-pale-blue/20 text-pale-blue hover:from-perfume-accent/35 hover:to-pale-blue/30 hover:shadow-lg hover:shadow-perfume-accent/30 active:opacity-90",
-    luxury:
-      "border-transparent bg-gradient-to-r from-pale-purple via-perfume-accent to-pale-blue shadow-premium text-white hover:shadow-luxury hover:brightness-110 active:brightness-95",
-  };
-
-  const finalClassName = `${baseStyles} ${sizeStyles[size]} ${variantStyles[variant]} ${className}`;
-
   return (
     <button
       disabled={disabled || isLoading}
-      className={finalClassName}
+      className={buttonClass(variant, size, className)}
       {...props}
     >
-      {isLoading ? "Loading..." : children}
+      {isLoading && (
+        <span
+          className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-t-transparent"
+          aria-hidden
+        />
+      )}
+      {children}
     </button>
+  );
+}
+
+export function ButtonLink({
+  href,
+  variant = "primary",
+  size = "md",
+  className = "",
+  children,
+}: {
+  href: string;
+  variant?: Variant;
+  size?: Size;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link href={href} className={buttonClass(variant, size, className)}>
+      {children}
+    </Link>
   );
 }

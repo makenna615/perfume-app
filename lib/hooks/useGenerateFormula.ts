@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Formula, ApiResponse } from "@/types";
-import type { OptimizationMode } from "@/lib/ai/prompts";
+import { ApiResponse, BuilderMode, Formula, OptimizationMode } from "@/types";
 
 export function useGenerateFormula() {
   const [loading, setLoading] = useState(false);
@@ -10,7 +9,7 @@ export function useGenerateFormula() {
   const [formula, setFormula] = useState<Formula | null>(null);
 
   const generate = async (
-    mode: "vibe" | "ingredients" | "inspired",
+    mode: BuilderMode,
     input: string,
     optimizationMode: OptimizationMode = "balanced"
   ) => {
@@ -22,21 +21,17 @@ export function useGenerateFormula() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode, input, optimizationMode }),
       });
-
-      const data: ApiResponse<Formula> = await response.json();
-
-      if (!data.success || !data.data) {
-        throw new Error(data.error || "Failed to generate formula");
+      const payload = (await response.json()) as ApiResponse<Formula>;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error || "Failed to generate formula");
       }
-
-      setFormula(data.data);
+      setFormula(payload.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      setFormula(null);
+      setError(err instanceof Error ? err.message : "Failed to generate formula");
     } finally {
       setLoading(false);
     }
   };
 
-  return { generate, formula, loading, error };
+  return { generate, formula, setFormula, loading, error };
 }

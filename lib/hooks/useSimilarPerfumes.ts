@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Perfume, ApiResponse } from "@/types";
+import { ApiResponse, SimilarSearchResult } from "@/types";
 
 export function useSimilarPerfumes() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<Perfume[]>([]);
+  const [result, setResult] = useState<SimilarSearchResult | null>(null);
 
   const search = async (query: string, searchType: "perfume" | "notes") => {
     setLoading(true);
@@ -17,46 +17,18 @@ export function useSimilarPerfumes() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, searchType }),
       });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+      const payload = (await response.json()) as ApiResponse<SimilarSearchResult>;
+      if (!response.ok || !payload.success || !payload.data) {
+        throw new Error(payload.error || "Search failed");
       }
-
-      const data: ApiResponse<Perfume[]> = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || "Failed to search perfumes");
-      }
-
-      const perfumes = data.data || [];
-      
-      if (!Array.isArray(perfumes)) {
-        throw new Error("Invalid response format: expected array");
-      }
-
-      // Validate perfumes have required fields
-      const validPerfumes = perfumes.filter(
-        (p): p is Perfume => 
-          p && 
-          typeof p === "object" &&
-          typeof p.id === "string" &&
-          typeof p.name === "string" &&
-          typeof p.brand === "string" &&
-          Array.isArray(p.topNotes) &&
-          Array.isArray(p.middleNotes) &&
-          Array.isArray(p.baseNotes)
-      );
-
-      setResults(validPerfumes);
+      setResult(payload.data);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An error occurred";
-      setError(errorMessage);
-      setResults([]);
-      console.error("Search error:", err);
+      setError(err instanceof Error ? err.message : "Search failed");
+      setResult(null);
     } finally {
       setLoading(false);
     }
   };
 
-  return { search, results, loading, error };
+  return { search, result, loading, error, clear: () => setResult(null) };
 }

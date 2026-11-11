@@ -1,22 +1,32 @@
-import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-import { ApiResponse, PerfumeIntelligenceResponse } from "@/types";
-import { getPerfumeIntelligencePrompt } from "@/lib/ai/prompts";
+import {
+  ApiResponse,
+  PerfumeIntelligenceAvailability,
+  PerfumeIntelligenceDetails,
+  PerfumeIntelligenceResponse,
+  PerfumeIntelligenceSuggestion,
+} from "@/types";
+import { getAIService } from "@/lib/ai/factory";
+import { getPageExtractionPrompt, getPerfumeIntelligencePrompt } from "@/lib/ai/prompts";
+import { AIServiceError } from "@/lib/ai/types";
+import {
+  CONFIDENCE,
+  MAX_INPUT_LENGTH,
+  PRICE_TIERS,
+  obj,
+  oneOf,
+  str,
+  strArr,
+  year,
+} from "@/lib/ai/sanitize";
 
-interface PerfumeIntelligenceBody {
-  perfumeName?: string;
-}
-
-interface AmbiguityOption {
-  name: string;
-  brand: string;
-  reason: string;
-}
-
-interface AmbiguityCheckResponse {
-  ambiguous: boolean;
-  options: AmbiguityOption[];
-}
+// Lookup strategy:
+// 1. Try Fragrantica for an exact title match (real, published note pyramid).
+//    Several exact matches and no brand in the query → ask the user to pick.
+// 2. In parallel, ask the model for the descriptive fields (description,
+//    performance, seasons…), which Fragrantica pages don't expose cleanly.
+// 3. Merge: Fragrantica wins for notes, accords, year and community rating.
+// Ratings, prices and URLs are never taken from the model.
 
 interface FragranticaMatch {
   name: string;
@@ -24,885 +34,379 @@ interface FragranticaMatch {
   url: string;
 }
 
-type ConfidenceLevel = "high" | "medium" | "low";
+interface FragranticaData {
+  match: FragranticaMatch;
+  notes: { top: string[]; middle: string[]; base: string[] };
+  accords: string[];
+  releaseYear?: number;
+  perfumers: string[];
+  community?: { rating: number; reviewsCount: number };
+  gender?: "male" | "female" | "unisex";
+}
 
-const SYSTEM_PROMPT =
-  "You are a fragrance encyclopedia and perfume database expert (like Fragrantica). Return only valid JSON.";
+const FETCH_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (compatible; PerfumeApp/1.0)",
+  Accept: "text/html,application/xhtml+xml",
+};
 
-function normalizeInput(value: string): string {
+// ---------------------------------------------------------------------------
+// Query helpers
+// ---------------------------------------------------------------------------
+
+function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function normalizeTitleForMatch(value: string): string {
-  return normalizeInput(value).replace(/[^a-z0-9\s]/g, "").trim();
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-}
-
-function extractJsonObject(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return null;
-    }
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      return null;
-    }
-  }
-}
-
-function hasBrandHintInQuery(query: string, brand?: string): boolean {
-  const normalizedQuery = normalizeInput(query);
-  if (normalizedQuery.includes(" by ")) {
-    return true;
-  }
-  if (!brand) {
-    return false;
-  }
-  return normalizedQuery.includes(normalizeInput(brand));
+function normalizeTitle(value: string): string {
+  return normalize(value)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim();
 }
 
 function splitPerfumeQuery(query: string): { title: string; brandHint?: string } {
-  const normalized = query.trim();
-  const lower = normalized.toLowerCase();
-  const byIndex = lower.indexOf(" by ");
+  const byIndex = query.toLowerCase().indexOf(" by ");
   if (byIndex > 0) {
-    return {
-      title: normalized.slice(0, byIndex).trim(),
-      brandHint: normalized.slice(byIndex + 4).trim(),
-    };
+    return { title: query.slice(0, byIndex).trim(), brandHint: query.slice(byIndex + 4).trim() };
   }
-  return { title: normalized };
+  return { title: query.trim() };
 }
 
-function sanitizeAmbiguityOptions(value: unknown): AmbiguityOption[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-      const obj = item as Record<string, unknown>;
-      return {
-        name: typeof obj.name === "string" ? obj.name : "",
-        brand: typeof obj.brand === "string" ? obj.brand : "",
-        reason:
-          typeof obj.reason === "string"
-            ? obj.reason
-            : "Same perfume title appears under another brand.",
-      };
-    })
-    .filter(
-      (item): item is AmbiguityOption =>
-        Boolean(item && item.name.trim().length > 0 && item.brand.trim().length > 0)
-    );
+function buildSearchLinks(name: string, brand: string): PerfumeIntelligenceAvailability[] {
+  const q = encodeURIComponent(`${brand} ${name}`.trim());
+  return [
+    { store: "Fragrantica", region: "Notes, reviews & votes", url: `https://www.fragrantica.com/search/?query=${q}` },
+    { store: "Sephora", region: "US retailer", url: `https://www.sephora.com/search?keyword=${q}` },
+    { store: "Google Shopping", region: "Compare current prices", url: `https://www.google.com/search?tbm=shop&q=${q}` },
+  ];
 }
 
-function decodeSlugToWords(value: string): string {
-  return decodeURIComponent(value).replace(/-/g, " ").trim();
+// ---------------------------------------------------------------------------
+// Fragrantica
+// ---------------------------------------------------------------------------
+
+async function fetchWithTimeout(url: string, ms: number): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: FETCH_HEADERS,
+      cache: "no-store",
+      signal: AbortSignal.timeout(ms),
+    });
+    return response.ok ? await response.text() : null;
+  } catch {
+    return null;
+  }
 }
 
-function extractFragranticaMatchesFromHtml(html: string, titleQuery: string): FragranticaMatch[] {
-  const target = normalizeTitleForMatch(titleQuery);
-  if (!target) {
-    return [];
+function decodeSlug(value: string): string {
+  try {
+    return decodeURIComponent(value).replace(/-/g, " ").trim();
+  } catch {
+    return value.replace(/-/g, " ").trim();
   }
+}
+
+function extractExactTitleMatches(html: string, titleQuery: string): FragranticaMatch[] {
+  const target = normalizeTitle(titleQuery);
+  if (!target) return [];
 
   const regex = /href="\/perfume\/([^/"]+)\/([^"?#]+)"/gi;
-  const map = new Map<string, FragranticaMatch>();
-  let match: RegExpExecArray | null = regex.exec(html);
+  const found = new Map<string, FragranticaMatch>();
+  let match: RegExpExecArray | null;
 
-  while (match) {
-    const brandSlug = match[1];
-    const perfumeSlugFull = match[2];
-    const perfumeSlug = perfumeSlugFull.replace(/-\d+\.html?$/i, "").replace(/\.html?$/i, "");
-
-    const brand = decodeSlugToWords(brandSlug);
-    const name = decodeSlugToWords(perfumeSlug);
-    const normalizedName = normalizeTitleForMatch(name);
-
-    if (normalizedName === target) {
-      const key = `${normalizedName}|${normalizeTitleForMatch(brand)}`;
-      if (!map.has(key)) {
-        map.set(key, {
+  while ((match = regex.exec(html))) {
+    const [, brandSlug, perfumeSlugFull] = match;
+    const name = decodeSlug(perfumeSlugFull.replace(/-\d+\.html?$/i, "").replace(/\.html?$/i, ""));
+    const brand = decodeSlug(brandSlug);
+    if (normalizeTitle(name) === target) {
+      const key = `${normalizeTitle(name)}|${normalizeTitle(brand)}`;
+      if (!found.has(key)) {
+        found.set(key, {
           name,
           brand,
           url: `https://www.fragrantica.com/perfume/${brandSlug}/${perfumeSlugFull}`,
         });
       }
     }
-
-    match = regex.exec(html);
   }
-
-  return Array.from(map.values());
+  return Array.from(found.values());
 }
 
-function mergeFragranticaMatches(...lists: FragranticaMatch[][]): FragranticaMatch[] {
-  const map = new Map<string, FragranticaMatch>();
-  for (const list of lists) {
-    for (const match of list) {
-      const key = `${normalizeInput(match.name)}|${normalizeInput(match.brand)}`;
-      if (!map.has(key)) {
-        map.set(key, match);
-      }
-    }
-  }
-  return Array.from(map.values());
-}
-
-async function fetchFragranticaExactTitleMatches(query: string): Promise<FragranticaMatch[]> {
-  const encoded = encodeURIComponent(query.trim());
-  if (!encoded) {
-    return [];
-  }
-
-  const urls = [
-    `https://www.fragrantica.com/search/?query=${encoded}`,
-    `https://www.fragrantica.com/search/?q=${encoded}`,
-    `https://www.fragrantica.com/search/?keywords=${encoded}`,
-  ];
-
-  const results: FragranticaMatch[] = [];
-
-  for (const url of urls) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4500);
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; PerfumeApp/1.0)",
-          Accept: "text/html,application/xhtml+xml",
-        },
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const html = await response.text();
-      results.push(...extractFragranticaMatchesFromHtml(html, query));
-    } catch {
-      // Soft-fail and fallback to model-only ambiguity detection.
-    }
-  }
-
-  return mergeFragranticaMatches(results);
-}
-
-function toAmbiguityOptions(matches: FragranticaMatch[]): AmbiguityOption[] {
-  return matches.map((match) => ({
-    name: match.name,
-    brand: match.brand,
-    reason: "Exact same fragrance title appears under multiple brands.",
-  }));
-}
-
-function selectFragranticaMatchByBrandHint(matches: FragranticaMatch[], query: string): FragranticaMatch | null {
-  if (matches.length === 0) {
-    return null;
-  }
-
-  const { brandHint } = splitPerfumeQuery(query);
-  if (brandHint) {
-    const hintedBrand = normalizeInput(brandHint);
-    const byMatch = matches.find((match) =>
-      normalizeInput(match.brand).includes(hintedBrand) || hintedBrand.includes(normalizeInput(match.brand))
-    );
-    if (byMatch) {
-      return byMatch;
-    }
-  }
-
-  const normalizedQuery = normalizeInput(query);
-  const containsBrandMatch = matches.find((match) =>
-    normalizedQuery.includes(normalizeInput(match.brand))
+async function findFragranticaMatches(title: string): Promise<FragranticaMatch[]> {
+  const q = encodeURIComponent(title.trim());
+  if (!q) return [];
+  const pages = await Promise.all(
+    [`query=${q}`, `q=${q}`].map((param) =>
+      fetchWithTimeout(`https://www.fragrantica.com/search/?${param}`, 4000)
+    )
   );
-  return containsBrandMatch || matches[0];
+  const merged = new Map<string, FragranticaMatch>();
+  for (const html of pages) {
+    if (!html) continue;
+    for (const m of extractExactTitleMatches(html, title)) {
+      merged.set(`${normalize(m.name)}|${normalize(m.brand)}`, m);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+function pickMatch(matches: FragranticaMatch[], query: string): FragranticaMatch | null {
+  if (matches.length === 0) return null;
+  const { brandHint } = splitPerfumeQuery(query);
+  const q = normalize(query);
+  const hint = brandHint ? normalize(brandHint) : null;
+  return (
+    (hint &&
+      matches.find((m) => normalize(m.brand).includes(hint) || hint.includes(normalize(m.brand)))) ||
+    matches.find((m) => q.includes(normalize(m.brand))) ||
+    (matches.length === 1 ? matches[0] : null)
+  );
 }
 
 function stripHtml(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function extractQuotedList(value: string): string[] {
-  const matches = value.match(/"([^"]+)"/g) || [];
-  return matches.map((item) => item.replace(/"/g, "").trim()).filter(Boolean);
-}
-
-function extractContextWindows(html: string, terms: string[], radius = 7000): string {
+function extractContextWindows(html: string, terms: string[], radius = 5000): string {
   const lower = html.toLowerCase();
-  const chunks: string[] = [];
-  const seen = new Set<string>();
-
+  const chunks: Array<[number, number]> = [];
   for (const term of terms) {
-    let idx = lower.indexOf(term.toLowerCase());
-    while (idx >= 0) {
-      const start = Math.max(0, idx - radius);
-      const end = Math.min(html.length, idx + radius);
-      const chunk = html.slice(start, end);
-      const key = `${start}-${end}`;
-      if (!seen.has(key)) {
-        chunks.push(chunk);
-        seen.add(key);
-      }
-      idx = lower.indexOf(term.toLowerCase(), idx + term.length);
-      if (chunks.length >= 8) {
-        break;
-      }
-    }
-    if (chunks.length >= 8) {
-      break;
-    }
+    const idx = lower.indexOf(term.toLowerCase());
+    if (idx >= 0) chunks.push([Math.max(0, idx - radius), Math.min(html.length, idx + radius)]);
   }
-
-  if (chunks.length === 0) {
-    return html.slice(0, 30000);
+  if (chunks.length === 0) return html.slice(0, 20000);
+  // Merge overlapping windows, then strip scripts/styles to save tokens.
+  chunks.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const chunk of chunks) {
+    const last = merged[merged.length - 1];
+    if (last && chunk[0] <= last[1]) last[1] = Math.max(last[1], chunk[1]);
+    else merged.push([...chunk]);
   }
-  return chunks.join("\n<!-- split -->\n").slice(0, 70000);
+  return merged
+    .map(([s, e]) => html.slice(s, e))
+    .join("\n<!-- … -->\n")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .slice(0, 40000);
 }
 
-async function parseFragranticaPageWithAI(
-  client: OpenAI,
-  html: string,
-  perfumeName: string,
-  brand: string
-): Promise<{
-  top: string[];
-  middle: string[];
-  base: string[];
-  releaseYear?: number;
-  rating?: number;
-  reviewsCount?: number;
-} | null> {
+function extractCommunity(html: string): { rating: number; reviewsCount: number } | undefined {
+  const rating = html.match(/"ratingValue"\s*:\s*"?([0-5](?:\.\d+)?)"?/i)?.[1];
+  const count = html.match(/"(?:ratingCount|reviewCount)"\s*:\s*"?([0-9][0-9,]*)"?/i)?.[1];
+  if (rating && count) {
+    const r = Number(rating);
+    const c = Number(count.replace(/,/g, ""));
+    if (Number.isFinite(r) && Number.isFinite(c) && c > 0) return { rating: r, reviewsCount: c };
+  }
+  return undefined;
+}
+
+function extractNotesNearLabel(html: string, label: string): string[] {
+  const index = html.toLowerCase().indexOf(label.toLowerCase());
+  if (index < 0) return [];
+  const chunk = html.slice(index, index + 4000);
+  const anchorRegex = /<a[^>]*>([^<]+)<\/a>/gi;
+  const notes: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = anchorRegex.exec(chunk)) && notes.length < 8) {
+    const candidate = stripHtml(m[1]);
+    if (candidate.length > 1 && candidate.length < 40 && !/fragrantica|perfume|parfum|home|search/i.test(candidate)) {
+      notes.push(candidate);
+    }
+  }
+  return Array.from(new Set(notes)).slice(0, 6);
+}
+
+async function fetchFragranticaData(match: FragranticaMatch): Promise<FragranticaData | null> {
+  const html = await fetchWithTimeout(match.url, 6000);
+  if (!html) return null;
+
+  const description = stripHtml(html.match(/<meta[^>]+name="description"[^>]+content="([^"]+)"/i)?.[1] ?? "");
   const snippet = extractContextWindows(html, [
     "top notes",
     "middle notes",
     "heart notes",
     "base notes",
     "main accords",
-    "launched in",
-    "ratingValue",
-    "reviewCount",
-    "ratingCount",
+    "perfumer",
   ]);
 
-  const prompt = `Extract perfume metadata ONLY from this Fragrantica HTML snippet.
-
-Perfume: "${perfumeName}"
-Brand: "${brand}"
-
-Return ONLY valid JSON:
-{
-  "top": ["string"],
-  "middle": ["string"],
-  "base": ["string"],
-  "releaseYear": 2019,
-  "rating": 4.2,
-  "reviewsCount": 850
-}
-
-Rules:
-- Use only the provided HTML snippet.
-- Top/middle/base should be the perfume's own note pyramid, not recommendations.
-- If a field is unavailable, omit it or return null.
-- Max 5 notes per layer.
-
-HTML:
-${snippet}`;
-
-  const parsed = await callModelAndParseJson(client, prompt, true);
-  if (!parsed || typeof parsed !== "object") {
-    return null;
-  }
-  const obj = parsed as Record<string, unknown>;
-  const releaseYear =
-    typeof obj.releaseYear === "number" && obj.releaseYear >= 1900 && obj.releaseYear <= 2100
-      ? obj.releaseYear
-      : undefined;
-  const rating =
-    typeof obj.rating === "number" && obj.rating >= 0 && obj.rating <= 5 ? obj.rating : undefined;
-  const reviewsCount =
-    typeof obj.reviewsCount === "number" && obj.reviewsCount >= 0 ? obj.reviewsCount : undefined;
-
-  return {
-    top: toStringArray(obj.top).slice(0, 5),
-    middle: toStringArray(obj.middle).slice(0, 5),
-    base: toStringArray(obj.base).slice(0, 5),
-    releaseYear,
-    rating,
-    reviewsCount,
-  };
-}
-
-function extractReleaseYearFromFragranticaHtml(html: string, description: string): number | undefined {
-  const launchedMatch = stripHtml(html).match(/launched in\s+(19|20)\d{2}/i);
-  if (launchedMatch) {
-    const yearMatch = launchedMatch[0].match(/(19|20)\d{2}/);
-    if (yearMatch) {
-      return Number(yearMatch[0]);
-    }
-  }
-
-  const datePublishedMatch = html.match(/"datePublished"\s*:\s*"((19|20)\d{2})/i);
-  if (datePublishedMatch) {
-    return Number(datePublishedMatch[1]);
-  }
-
-  const descYearMatch = description.match(/\b(19|20)\d{2}\b/);
-  if (descYearMatch) {
-    return Number(descYearMatch[0]);
-  }
-
-  return undefined;
-}
-
-function extractCommunityFromFragranticaHtml(
-  html: string
-): { rating: number; reviewsCount: number } | undefined {
-  const ratingValueMatch = html.match(/"ratingValue"\s*:\s*"?([0-5](?:\.\d+)?)"?/i);
-  const countMatch = html.match(
-    /"(ratingCount|reviewCount)"\s*:\s*"?([0-9][0-9,]*)"?/i
-  );
-
-  if (ratingValueMatch?.[1] && countMatch?.[2]) {
-    const rating = Number(ratingValueMatch[1]);
-    const reviewsCount = Number(countMatch[2].replace(/,/g, ""));
-    if (!Number.isNaN(rating) && !Number.isNaN(reviewsCount) && reviewsCount > 0) {
-      return { rating, reviewsCount };
-    }
-  }
-
-  const textMatch = stripHtml(html).match(
-    /rating\s+([0-5](?:\.\d+)?)\s+out of 5 with\s+([0-9][0-9,]*)\s+votes/i
-  );
-  if (textMatch) {
-    const rating = Number(textMatch[1]);
-    const reviewsCount = Number(textMatch[2].replace(/,/g, ""));
-    if (!Number.isNaN(rating) && !Number.isNaN(reviewsCount) && reviewsCount > 0) {
-      return { rating, reviewsCount };
-    }
-  }
-
-  return undefined;
-}
-
-function extractFragranticaRelevantHtml(html: string): string {
-  const lower = html.toLowerCase();
-  const anchorTerms = ["top notes", "middle notes", "heart notes", "base notes", "main accords"];
-  const startCandidates = anchorTerms
-    .map((term) => lower.indexOf(term))
-    .filter((idx) => idx >= 0);
-
-  if (startCandidates.length === 0) {
-    return html.slice(0, 25000);
-  }
-
-  const start = Math.max(0, Math.min(...startCandidates) - 5000);
-  const end = Math.min(html.length, start + 30000);
-  return html.slice(start, end);
-}
-
-async function parseNotesFromFragranticaHtmlWithAI(
-  client: OpenAI,
-  html: string,
-  perfumeName: string,
-  brand: string
-): Promise<{ top: string[]; middle: string[]; base: string[] } | null> {
-  const relevantHtml = extractFragranticaRelevantHtml(html);
-  const prompt = `Extract ONLY the official note pyramid for this perfume from the provided Fragrantica HTML snippet.
-
-Perfume: "${perfumeName}"
-Brand: "${brand}"
-
-Rules:
-- Use only information present in the HTML snippet.
-- Ignore recommendations/other perfumes on page.
-- Return up to 5 notes per layer.
-- If a layer is not present, return empty array for that layer.
-- Return ONLY valid JSON:
-{
-  "top": ["string"],
-  "middle": ["string"],
-  "base": ["string"]
-}
-
-HTML snippet:
-${relevantHtml}`;
-
-  const parsed = await callModelAndParseJson(client, prompt, true);
-  if (!parsed || typeof parsed !== "object") {
-    return null;
-  }
-  const obj = parsed as Record<string, unknown>;
-  return {
-    top: toStringArray(obj.top).slice(0, 5),
-    middle: toStringArray(obj.middle).slice(0, 5),
-    base: toStringArray(obj.base).slice(0, 5),
-  };
-}
-
-function extractNotesFromJsonLike(html: string): { top: string[]; middle: string[]; base: string[] } | null {
-  const topMatch = html.match(/"(topNotes|top_notes)"\s*:\s*\[([^\]]*)\]/i);
-  const midMatch = html.match(/"(middleNotes|heartNotes|middle_notes|heart_notes)"\s*:\s*\[([^\]]*)\]/i);
-  const baseMatch = html.match(/"(baseNotes|base_notes)"\s*:\s*\[([^\]]*)\]/i);
-
-  if (!topMatch || !midMatch || !baseMatch) {
-    return null;
-  }
-
-  return {
-    top: extractQuotedList(topMatch[2]).slice(0, 5),
-    middle: extractQuotedList(midMatch[2]).slice(0, 5),
-    base: extractQuotedList(baseMatch[2]).slice(0, 5),
-  };
-}
-
-function extractNotesNearLabel(html: string, label: string): string[] {
-  const index = html.toLowerCase().indexOf(label.toLowerCase());
-  if (index < 0) {
-    return [];
-  }
-  const chunk = html.slice(index, index + 4000);
-  const anchorRegex = /<a[^>]*>([^<]+)<\/a>/gi;
-  const notes: string[] = [];
-  let m: RegExpExecArray | null = anchorRegex.exec(chunk);
-  while (m && notes.length < 8) {
-    const candidate = stripHtml(m[1]);
-    if (
-      candidate.length > 1 &&
-      candidate.length < 40 &&
-      !/fragrantica|perfume|parfum|home|search/i.test(candidate)
-    ) {
-      notes.push(candidate);
-    }
-    m = anchorRegex.exec(chunk);
-  }
-  return Array.from(new Set(notes)).slice(0, 5);
-}
-
-async function fetchFragranticaDetails(
-  client: OpenAI,
-  match: FragranticaMatch
-): Promise<PerfumeIntelligenceResponse | null> {
+  let extracted: Record<string, unknown> = {};
   try {
-    const response = await fetch(match.url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; PerfumeApp/1.0)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      cache: "no-store",
+    extracted = await getAIService().generateJSON({
+      task: "page-extraction",
+      ...getPageExtractionPrompt(snippet, match.name, match.brand),
     });
-    if (!response.ok) {
-      return null;
-    }
-    const html = await response.text();
+  } catch {
+    // fall through to regex extraction
+  }
 
-    const metaDescMatch = html.match(/<meta[^>]+name="description"[^>]+content="([^"]+)"/i);
-    const description = metaDescMatch ? stripHtml(metaDescMatch[1]) : "";
-
-    const pageAi = await parseFragranticaPageWithAI(client, html, match.name, match.brand);
-    const notesFromAi = await parseNotesFromFragranticaHtmlWithAI(
-      client,
-      html,
-      match.name,
-      match.brand
-    );
-    const notesFromSections = {
+  let notes = {
+    top: strArr(extracted.top, 8),
+    middle: strArr(extracted.middle, 8),
+    base: strArr(extracted.base, 8),
+  };
+  if (notes.top.length + notes.middle.length + notes.base.length === 0) {
+    notes = {
       top: extractNotesNearLabel(html, "Top Notes"),
       middle: extractNotesNearLabel(html, "Middle Notes").length
         ? extractNotesNearLabel(html, "Middle Notes")
         : extractNotesNearLabel(html, "Heart Notes"),
       base: extractNotesNearLabel(html, "Base Notes"),
     };
-    const notesFromJson = extractNotesFromJsonLike(html);
-    const notes = pageAi && hasCompleteNoteLayers({
-      top: pageAi.top,
-      middle: pageAi.middle,
-      base: pageAi.base,
-    })
-      ? { top: pageAi.top, middle: pageAi.middle, base: pageAi.base }
-      : notesFromAi && hasCompleteNoteLayers(notesFromAi)
-        ? notesFromAi
-      : hasCompleteNoteLayers(notesFromSections)
-        ? notesFromSections
-        : notesFromJson || notesFromSections;
+  }
+  if (notes.top.length + notes.middle.length + notes.base.length === 0) return null;
 
-    if (!hasCompleteNoteLayers(notes)) {
-      return null;
-    }
+  const launched = stripHtml(html).match(/launched in\s+((?:19|20)\d{2})/i)?.[1];
 
-    const accordCandidates = [
-      ...extractNotesNearLabel(html, "Main accords"),
-      ...extractNotesNearLabel(html, "Main Accords"),
-    ]
-      .map((item) => item.toLowerCase())
-      .filter((item) => item.length > 1);
-
-    const accords = Array.from(new Set(accordCandidates)).slice(0, 6).map((name, index) => ({
-      name,
-      strength: (index === 0 ? "dominant" : index < 3 ? "prominent" : "subtle") as
-        | "dominant"
-        | "prominent"
-        | "subtle",
-    }));
-
-    const releaseYear =
-      pageAi?.releaseYear ?? extractReleaseYearFromFragranticaHtml(html, description);
-    const extractedCommunity = extractCommunityFromFragranticaHtml(html);
-    const community = extractedCommunity || (pageAi?.rating && pageAi?.reviewsCount
-      ? { rating: pageAi.rating, reviewsCount: pageAi.reviewsCount }
-      : undefined);
-    const gender = /for women and men|for men and women|unisex/i.test(description)
+  return {
+    match,
+    notes,
+    accords: strArr(extracted.accords, 6).map((a) => a.toLowerCase()),
+    releaseYear: year(extracted.releaseYear) ?? year(launched),
+    perfumers: strArr(extracted.perfumers, 4),
+    community: extractCommunity(html),
+    gender: /for women and men|for men and women/i.test(description)
       ? "unisex"
       : /for men/i.test(description)
         ? "male"
         : /for women/i.test(description)
           ? "female"
-          : undefined;
-
-    return {
-      found: true,
-      confidence: accords.length > 0 ? "high" : "medium",
-      ambiguous: false,
-      perfume: {
-        name: match.name,
-        brand: match.brand,
-        releaseYear,
-        perfumer: undefined,
-        gender,
-        fragranceFamily: accords[0]?.name,
-        accords,
-        notes,
-        performance: undefined,
-        description:
-          description ||
-          `${notes.top[0]} opens the scent, evolving through a ${notes.middle[0]} heart into ${notes.base[0]} on dry down.`,
-        pricing: undefined,
-        availability: [
-          {
-            store: "Fragrantica",
-            region: "Global",
-            url: match.url,
-          },
-        ],
-        community,
-      },
-      suggestions: [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-function sanitizeConfidence(value: unknown): ConfidenceLevel {
-  if (value === "high" || value === "medium" || value === "low") {
-    return value;
-  }
-  return "low";
-}
-
-function sanitizeAccords(value: unknown): Array<{
-  name: string;
-  strength: "dominant" | "prominent" | "subtle";
-}> {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
-      const obj = item as Record<string, unknown>;
-      const strength: "dominant" | "prominent" | "subtle" =
-        obj.strength === "dominant" || obj.strength === "prominent" || obj.strength === "subtle"
-          ? obj.strength
-          : "subtle";
-      return {
-        name: typeof obj.name === "string" ? obj.name : "",
-        strength,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item && item.name.trim().length > 0));
-}
-
-function hasCompleteNoteLayers(notes: { top: string[]; middle: string[]; base: string[] }): boolean {
-  return notes.top.length > 0 && notes.middle.length > 0 && notes.base.length > 0;
-}
-
-function mergeAmbiguityOptions(...lists: AmbiguityOption[][]): AmbiguityOption[] {
-  const map = new Map<string, AmbiguityOption>();
-  for (const list of lists) {
-    for (const option of list) {
-      const key = `${normalizeInput(option.name)}|${normalizeInput(option.brand)}`;
-      if (!map.has(key)) {
-        map.set(key, option);
-      }
-    }
-  }
-  return Array.from(map.values());
-}
-
-async function callModelAndParseJson(
-  client: OpenAI,
-  prompt: string,
-  retryOnceOnInvalidJson = true
-): Promise<unknown | null> {
-  const maxAttempts = retryOnceOnInvalidJson ? 2 : 1;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const attemptPrompt =
-      attempt === 0
-        ? prompt
-        : `${prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY valid JSON with no extra text.`;
-
-    const completion = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      temperature: 0.2,
-      max_tokens: 1600,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: attemptPrompt },
-      ],
-    });
-
-    const content = completion.choices[0]?.message?.content;
-    if (!content) {
-      continue;
-    }
-
-    const parsed = extractJsonObject(content);
-    if (parsed) {
-      return parsed;
-    }
-  }
-
-  return null;
-}
-
-async function detectAmbiguousName(
-  client: OpenAI,
-  originalQuery: string,
-  resolvedPerfumeName: string
-): Promise<AmbiguityCheckResponse> {
-  const prompt = `You are resolving perfume name collisions across brands.
-
-User query: "${originalQuery}"
-Exact perfume title to check: "${resolvedPerfumeName}"
-
-Rules:
-- Find perfumes that share the same fragrance title across different brands.
-- Focus on exact title collisions first (case-insensitive).
-- Include EVERY known brand option you can confidently identify for this exact title.
-- Exclude unrelated "similar" perfumes with different titles.
-- If only one brand is known for that title, ambiguous = false.
-- If two or more brands are known for that title, ambiguous = true.
-- Return ONLY valid JSON.
-
-{
-  "title": "Wood Infusion",
-  "ambiguous": true,
-  "options": [
-    {
-      "name": "Wood Infusion",
-      "brand": "Brand A",
-      "reason": "Exact same fragrance title used by multiple brands."
-    },
-    {
-      "name": "Wood Infusion",
-      "brand": "Brand B",
-      "reason": "Exact same fragrance title used by multiple brands."
-    }
-  ]
-}`;
-
-  const parsed = await callModelAndParseJson(client, prompt, true);
-  if (!parsed || typeof parsed !== "object") {
-    return { ambiguous: false, options: [] };
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  const options = sanitizeAmbiguityOptions(obj.options);
-  return {
-    ambiguous: options.length > 1 || (Boolean(obj.ambiguous) && options.length > 0),
-    options,
+          : undefined,
   };
 }
 
-function sanitizeResponse(input: unknown): PerfumeIntelligenceResponse {
-  const fallback: PerfumeIntelligenceResponse = {
-    found: false,
-    confidence: "low",
-    ambiguous: false,
-    perfume: null,
-    suggestions: [
-      {
-        name: "Bleu de Chanel",
-        brand: "Chanel",
-        reason: "Widely known and often compared in modern fresh-woody categories.",
-      },
-      {
-        name: "Acqua di Gio Profumo",
-        brand: "Giorgio Armani",
-        reason: "Popular benchmark fragrance for aquatic aromatic styles.",
-      },
-    ],
-  };
+// ---------------------------------------------------------------------------
+// Model output
+// ---------------------------------------------------------------------------
 
-  if (!input || typeof input !== "object") {
-    return fallback;
-  }
+const LONGEVITY = ["poor", "moderate", "long-lasting", "very long-lasting"] as const;
+const SILLAGE = ["soft", "moderate", "strong", "enormous"] as const;
+const STRENGTH = ["dominant", "prominent", "subtle"] as const;
+const SEASONS = ["spring", "summer", "autumn", "winter"] as const;
 
-  const data = input as Record<string, unknown>;
-  const confidence = sanitizeConfidence(data.confidence);
-  let found = Boolean(data.found);
-  const ambiguous = Boolean(data.ambiguous);
+function sanitizeSuggestions(value: unknown, fallbackReason: string): PerfumeIntelligenceSuggestion[] {
+  return (Array.isArray(value) ? value : [])
+    .map(obj)
+    .filter((item): item is Record<string, unknown> => Boolean(item && str(item.name) && str(item.brand)))
+    .slice(0, 6)
+    .map((item) => ({
+      name: str(item.name, 120)!,
+      brand: str(item.brand, 120)!,
+      reason: str(item.reason, 240) ?? fallbackReason,
+    }));
+}
 
-  // Strict rule: low confidence cannot be treated as found.
-  if (confidence === "low") {
-    found = false;
-  }
-
-  if (!found) {
-    const suggestions = Array.isArray(data.suggestions)
-      ? data.suggestions
-          .map((item) => {
-            if (!item || typeof item !== "object") {
-              return null;
-            }
-            const obj = item as Record<string, unknown>;
-            return {
-              name: typeof obj.name === "string" ? obj.name : "Unknown Perfume",
-              brand: typeof obj.brand === "string" ? obj.brand : "Unknown Brand",
-              reason:
-                typeof obj.reason === "string"
-                  ? obj.reason
-                  : "Popular fragrance with related scent DNA.",
-            };
-          })
-          .filter((item): item is NonNullable<typeof item> => Boolean(item))
-      : [];
-
-    return {
-      found: false,
-      confidence: "low",
-      ambiguous,
-      perfume: null,
-      suggestions: suggestions.length > 0 ? suggestions : fallback.suggestions,
-    };
-  }
-
-  const perfumeRaw = data.perfume;
-  if (!perfumeRaw || typeof perfumeRaw !== "object") {
-    return fallback;
-  }
-
-  const perfume = perfumeRaw as Record<string, unknown>;
-  const notesRaw =
-    perfume.notes && typeof perfume.notes === "object"
-      ? (perfume.notes as Record<string, unknown>)
-      : {};
-  const performanceRaw =
-    perfume.performance && typeof perfume.performance === "object"
-      ? (perfume.performance as Record<string, unknown>)
-      : null;
-  const pricingRaw =
-    perfume.pricing && typeof perfume.pricing === "object"
-      ? (perfume.pricing as Record<string, unknown>)
-      : null;
+function sanitizeModelResponse(raw: Record<string, unknown>): PerfumeIntelligenceResponse {
+  const confidence = oneOf(raw.confidence, CONFIDENCE) ?? "low";
+  const p = obj(raw.perfume);
+  const notesRaw = obj(p?.notes);
+  const performance = obj(p?.performance);
 
   const notes = {
-    top: toStringArray(notesRaw.top),
-    middle: toStringArray(notesRaw.middle),
-    base: toStringArray(notesRaw.base),
+    top: strArr(notesRaw?.top, 8),
+    middle: strArr(notesRaw?.middle, 10),
+    base: strArr(notesRaw?.base, 8),
   };
+  const hasNotes = notes.top.length + notes.middle.length + notes.base.length > 0;
+
+  const alternatives = sanitizeSuggestions(raw.sameNameAlternatives, "Shares this name.");
+  const suggestions = sanitizeSuggestions(raw.suggestions, "A close match to your search.");
+
+  // Low confidence is never presented as a found result.
+  if (raw.found !== true || confidence === "low" || !p || !str(p.name) || !hasNotes) {
+    return { found: false, confidence: "low", ambiguous: false, perfume: null, alternatives: [], suggestions };
+  }
+
+  const name = str(p.name, 120)!;
+  const brand = str(p.brand, 120) ?? "";
+  const longevity = oneOf(performance?.longevity, LONGEVITY);
+  const sillage = oneOf(performance?.sillage, SILLAGE);
+
+  const perfume: PerfumeIntelligenceDetails = {
+    name,
+    brand,
+    concentration: str(p.concentration, 40),
+    // Only trust the year when the model is highly confident about the perfume.
+    releaseYear: confidence === "high" ? year(p.releaseYear) : undefined,
+    perfumers: strArr(p.perfumers, 4),
+    gender: oneOf(p.gender, ["male", "female", "unisex"] as const),
+    fragranceFamily: str(p.fragranceFamily, 60),
+    accords: (Array.isArray(p.accords) ? p.accords : [])
+      .map(obj)
+      .filter((a): a is Record<string, unknown> => Boolean(a && str(a.name)))
+      .slice(0, 6)
+      .map((a) => ({ name: str(a.name, 40)!.toLowerCase(), strength: oneOf(a.strength, STRENGTH) ?? "subtle" })),
+    description: str(p.description, 800) ?? "",
+    notesStructure: p.notesStructure === "linear" ? "linear" : "pyramid",
+    notes,
+    performance: longevity && sillage ? { longevity, sillage } : undefined,
+    seasons: strArr(p.seasons, 4).map((s) => s.toLowerCase()).filter((s) => (SEASONS as readonly string[]).includes(s)),
+    occasions: strArr(p.occasions, 5, 30),
+    priceTier: oneOf(p.priceTier, PRICE_TIERS),
+    availability: buildSearchLinks(name, brand),
+    source: "ai",
+  };
+
+  return { found: true, confidence, ambiguous: false, perfume, alternatives, suggestions: [] };
+}
+
+function mergeWithFragrantica(
+  base: PerfumeIntelligenceResponse,
+  frag: FragranticaData
+): PerfumeIntelligenceResponse {
+  const ai = base.found ? base.perfume : null;
+  const fragAccords = frag.accords.map((name, index) => ({
+    name,
+    strength: (index === 0 ? "dominant" : index < 3 ? "prominent" : "subtle") as
+      | "dominant"
+      | "prominent"
+      | "subtle",
+  }));
+  const notesStructure =
+    frag.notes.top.length === 0 && frag.notes.base.length === 0 ? "linear" : "pyramid";
 
   return {
     found: true,
-    confidence,
+    confidence: "high",
     ambiguous: false,
-    perfume: {
-      name: typeof perfume.name === "string" ? perfume.name : "Unknown Perfume",
-      brand: typeof perfume.brand === "string" ? perfume.brand : "Unknown Brand",
-      releaseYear: undefined,
-      perfumer: typeof perfume.perfumer === "string" ? perfume.perfumer : undefined,
-      gender:
-        perfume.gender === "male" || perfume.gender === "female" || perfume.gender === "unisex"
-          ? perfume.gender
-          : undefined,
-      fragranceFamily:
-        typeof perfume.fragranceFamily === "string" ? perfume.fragranceFamily : undefined,
-      accords: sanitizeAccords(perfume.accords),
-      notes,
-      performance: performanceRaw
-        ? {
-            longevity:
-              performanceRaw.longevity === "poor" ||
-              performanceRaw.longevity === "moderate" ||
-              performanceRaw.longevity === "long-lasting" ||
-              performanceRaw.longevity === "very long-lasting"
-                ? performanceRaw.longevity
-                : "moderate",
-            sillage:
-              performanceRaw.sillage === "soft" ||
-              performanceRaw.sillage === "moderate" ||
-              performanceRaw.sillage === "strong" ||
-              performanceRaw.sillage === "enormous"
-                ? performanceRaw.sillage
-                : "moderate",
-          }
-        : undefined,
-      description:
-        typeof perfume.description === "string"
-          ? perfume.description
-          : "No description available.",
-      pricing: pricingRaw
-        ? {
-            averageUSD:
-              typeof pricingRaw.averageUSD === "number" ? pricingRaw.averageUSD : 0,
-            size: typeof pricingRaw.size === "string" ? pricingRaw.size : "100ml",
-          }
-        : undefined,
-      availability: Array.isArray(perfume.availability)
-        ? perfume.availability
-            .map((item) => {
-              if (!item || typeof item !== "object") {
-                return null;
-              }
-              const obj = item as Record<string, unknown>;
-              return {
-                store: typeof obj.store === "string" ? obj.store : "Retailer",
-                region: typeof obj.region === "string" ? obj.region : "Global",
-                url: typeof obj.url === "string" ? obj.url : "#",
-              };
-            })
-            .filter((item): item is NonNullable<typeof item> => Boolean(item))
-        : [],
-      community: undefined,
-    },
+    alternatives: base.alternatives,
     suggestions: [],
+    perfume: {
+      name: frag.match.name.replace(/\b\w/g, (c) => c.toUpperCase()),
+      brand: frag.match.brand.replace(/\b\w/g, (c) => c.toUpperCase()),
+      concentration: ai?.concentration,
+      releaseYear: frag.releaseYear ?? ai?.releaseYear,
+      perfumers: frag.perfumers.length ? frag.perfumers : ai?.perfumers ?? [],
+      gender: frag.gender ?? ai?.gender,
+      fragranceFamily: ai?.fragranceFamily ?? frag.accords[0],
+      accords: fragAccords.length ? fragAccords : ai?.accords ?? [],
+      description: ai?.description ?? "",
+      notesStructure,
+      notes: frag.notes,
+      performance: ai?.performance,
+      seasons: ai?.seasons ?? [],
+      occasions: ai?.occasions ?? [],
+      priceTier: ai?.priceTier,
+      availability: buildSearchLinks(frag.match.name, frag.match.brand),
+      community: frag.community,
+      source: "fragrantica",
+      sourceUrl: frag.match.url,
+    },
   };
 }
 
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
+
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as PerfumeIntelligenceBody;
-    const perfumeName = body.perfumeName?.trim();
+    const body = (await request.json()) as { perfumeName?: unknown };
+    const perfumeName =
+      typeof body.perfumeName === "string" ? body.perfumeName.trim().slice(0, MAX_INPUT_LENGTH) : "";
 
     if (!perfumeName) {
       return NextResponse.json(
@@ -911,21 +415,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, error: "OPENAI_API_KEY is not configured." } as ApiResponse<null>,
-        { status: 500 }
-      );
-    }
+    const { title, brandHint } = splitPerfumeQuery(perfumeName);
+    const matches = await findFragranticaMatches(title || perfumeName);
+    const selected = pickMatch(matches, perfumeName);
 
-    const client = new OpenAI({ apiKey });
-    const queryParts = splitPerfumeQuery(perfumeName);
-    const titleQuery = queryParts.title || perfumeName;
-    const fragranticaMatches = await fetchFragranticaExactTitleMatches(titleQuery);
-    const queryHasBrandHint = hasBrandHintInQuery(perfumeName);
-
-    if (!queryHasBrandHint && fragranticaMatches.length > 1) {
+    // Real, verified name collision and nothing to disambiguate with → ask.
+    if (!selected && matches.length > 1 && !brandHint) {
       return NextResponse.json({
         success: true,
         data: {
@@ -933,95 +428,45 @@ export async function POST(request: NextRequest) {
           confidence: "low",
           ambiguous: true,
           perfume: null,
-          suggestions: toAmbiguityOptions(fragranticaMatches),
+          alternatives: [],
+          suggestions: matches.slice(0, 8).map((m) => ({
+            name: m.name.replace(/\b\w/g, (c) => c.toUpperCase()),
+            brand: m.brand.replace(/\b\w/g, (c) => c.toUpperCase()),
+            reason: "Listed on Fragrantica with this exact name.",
+          })),
         },
       } as ApiResponse<PerfumeIntelligenceResponse>);
     }
 
-    const selectedFragranticaMatch = selectFragranticaMatchByBrandHint(
-      fragranticaMatches,
-      perfumeName
-    );
+    const modelQuery = selected ? `${selected.name} by ${selected.brand}` : perfumeName;
+    const [modelRaw, fragData] = await Promise.all([
+      getAIService().generateJSON({ task: "perfume-details", ...getPerfumeIntelligencePrompt(modelQuery) }),
+      selected ? fetchFragranticaData(selected) : Promise.resolve(null),
+    ]);
 
-    if (selectedFragranticaMatch) {
-      const fragranticaFirst = await fetchFragranticaDetails(client, selectedFragranticaMatch);
-      if (fragranticaFirst?.found && fragranticaFirst.perfume) {
-        return NextResponse.json({
-          success: true,
-          data: fragranticaFirst,
-        } as ApiResponse<PerfumeIntelligenceResponse>);
-      }
+    let result = sanitizeModelResponse(modelRaw);
+    if (fragData) {
+      result = mergeWithFragrantica(result, fragData);
     }
 
-    const prompt = getPerfumeIntelligencePrompt(perfumeName);
-    const parsed = await callModelAndParseJson(client, prompt, true);
-
-    // Strict rule: retry once on invalid JSON; if still invalid, fail.
-    if (!parsed) {
-      return NextResponse.json(
-        { success: false, error: "Invalid JSON from model after retry." } as ApiResponse<null>,
-        { status: 502 }
+    // Drop "alternatives" that are just the found perfume itself.
+    if (result.perfume) {
+      const self = `${normalize(result.perfume.name)}|${normalize(result.perfume.brand)}`;
+      result.alternatives = result.alternatives.filter(
+        (alt) => `${normalize(alt.name)}|${normalize(alt.brand)}` !== self
       );
     }
 
-    let sanitized = sanitizeResponse(parsed);
-
-    const queryHasBrandHintWithBrand = hasBrandHintInQuery(
-      perfumeName,
-      sanitized.perfume ? sanitized.perfume.brand : undefined
-    );
-
-    if (!queryHasBrandHintWithBrand) {
-      const ambiguityCandidate =
-        sanitized.found && sanitized.perfume ? sanitized.perfume.name : titleQuery;
-      const realSourceMatches = await fetchFragranticaExactTitleMatches(ambiguityCandidate);
-      const primary = await detectAmbiguousName(client, perfumeName, ambiguityCandidate);
-      const secondary =
-        normalizeInput(ambiguityCandidate) !== normalizeInput(titleQuery)
-          ? await detectAmbiguousName(client, perfumeName, titleQuery)
-          : { ambiguous: false, options: [] };
-      const mergedOptions = mergeAmbiguityOptions(
-        toAmbiguityOptions(realSourceMatches),
-        primary.options,
-        secondary.options
-      );
-      const isAmbiguous =
-        mergedOptions.length > 1 ||
-        realSourceMatches.length > 1 ||
-        primary.ambiguous ||
-        secondary.ambiguous;
-
-      if (isAmbiguous) {
-        sanitized = {
-          found: false,
-          confidence: "low",
-          ambiguous: true,
-          perfume: null,
-          suggestions: mergedOptions,
-        };
-      }
-    }
-
-    // Strict rule: if any note layer is missing, reject response.
-    if (sanitized.found && sanitized.perfume && !hasCompleteNoteLayers(sanitized.perfume.notes)) {
-      return NextResponse.json(
-        { success: false, error: "Incomplete note pyramid from model." } as ApiResponse<null>,
-        { status: 502 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: sanitized,
-    } as ApiResponse<PerfumeIntelligenceResponse>);
+    return NextResponse.json({ success: true, data: result } as ApiResponse<PerfumeIntelligenceResponse>);
   } catch (error) {
     console.error("Perfume intelligence error:", error);
+    const status = error instanceof AIServiceError ? error.status : 500;
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to fetch perfume details.",
+        error: error instanceof AIServiceError ? error.message : "Failed to fetch perfume details.",
       } as ApiResponse<null>,
-      { status: 500 }
+      { status }
     );
   }
 }
