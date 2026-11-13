@@ -2,11 +2,12 @@
 
 **An AI-powered fragrance studio: find perfumes that truly smell alike, look up accurate note pyramids, and turn a memory into a perfume formula you can actually mix.**
 
-**Live app:** https://perfume-app-ruby.vercel.app (password-protected — access by invitation)
+**See it live:** [my perfume collection](https://perfume-app-ruby.vercel.app/collection) — public, no login needed.
+The full app at https://perfume-app-ruby.vercel.app is password-protected (access by invitation).
 
 ![Home page](docs/screenshots/home.jpg)
 
-Built with Next.js 16, React 19, TypeScript, Tailwind CSS 4 and the OpenAI API.
+Built with Next.js 16, React 19, TypeScript, Tailwind CSS 4, Postgres and the OpenAI API.
 
 ---
 
@@ -22,64 +23,51 @@ Building it brought its own challenge. General-purpose AI is confidently wrong a
 
 | | |
 |---|---|
-| **Discover** | Find alternatives to a perfume — labelled as a near-identical dupe, close alternative, flanker or same family, with the notes they really share and how they differ. Look up any perfume's note pyramid, accords, performance and best seasons. Search for perfumes built around specific notes. |
-| **Compose** | Describe a memory ("a rainy pine forest at dusk"), list the materials on your shelf, or name a perfume to reinterpret. Get a weighable formula of real, purchasable materials at realistic levels, with safety notes and a batch calculator for any strength and bottle size. Save formulas to a notebook. |
-| **Materials** | Learn what's behind a note — e.g. "white musk" → Galaxolide, Habanolide, Ethylene Brassylate — with odor profile, typical usage, dilution, allergens and IFRA restrictions. |
+| **Discover** | Find alternatives to a perfume — labelled as a near-identical dupe, close alternative, flanker or same family, with the notes they really share and how they differ. Look up any perfume's note pyramid, accords, performance and best seasons — including niche and indie releases, found via web search with links to the sources. |
+| **Compose** | Describe a memory ("a rainy pine forest at dusk"), list the materials on your shelf, or name a perfume to reinterpret. Get a weighable formula of real, purchasable materials at realistic levels, with safety notes and a batch calculator for any strength and bottle size. |
+| **Materials** | Learn what's behind a note — e.g. "white musk" → Galaxolide, Habanolide, Ethylene Brassylate — with typical usage, dilution, allergens and safety restrictions. |
+| **Shelf** | My collection, bottle by bottle — add perfumes one at a time or paste a whole list. Each bottle stands in a lit display niche as an AI studio render made from the brand's real product photo. A [read-only public version](https://perfume-app-ruby.vercel.app/collection) shows the collection to visitors. |
+
+![The public collection](docs/screenshots/collection.jpg)
 
 ![Perfume details](docs/screenshots/perfume-details.jpg)
 
 ![Generated formula with batch calculator](docs/screenshots/formula.jpg)
 
+![Materials library on mobile](docs/screenshots/materials-mobile.jpg)
+
 ---
 
 ## Engineering highlights
 
-### Prompt engineering for factual accuracy
-- **Shared domain knowledge in every prompt** — a reference block distinguishing marketing *notes* from purchasable *materials*, realistic usage levels per material, evaporation timings, product concentrations and IFRA/safety rules (phototoxic citrus, restricted mosses, EU-banned Lilial/Lyral).
-- **Explicit permission not to know** — the model returns `null`, an empty list or a lower confidence instead of guessing, and low-confidence results are never shown as facts.
-- **Never asking for unknowable data** — the model isn't asked for prices, stock, ratings or URLs; the app builds store links itself and shows cost as a coarse tier.
-- **Built-in verification** — similar-perfume results only list notes present in *both* published pyramids, and weak matches are dropped rather than padded.
+### Making AI trustworthy about perfume
+- Every prompt carries a built-in perfumery reference — marketing notes vs. real materials, realistic usage levels, and safety rules — so formulas use ingredients you can buy at doses that work.
+- The AI is allowed to say "I don't know" instead of guessing, and is never asked for things it can't know, like prices, stock or ratings.
+- Every AI response is validated before it reaches the screen; formulas are always normalised to exactly 100%.
 
-### Model evaluation, not guesswork
-I ran the same prompts against four models and checked the answers against published note lists. The original GPT-4-class models suggested perfumes that aren't real alternatives and invented shared notes; `gpt-5.5` was the most accurate but took ~27 s per request; **`gpt-5.4-mini` matched it closely at 4–18 s** and became the default. The model is configurable through an environment variable, and the service supports both standard and reasoning-model APIs.
+### Choosing the model with evidence
+I ran the same prompts against four OpenAI models and checked the answers against published note lists. Older models invented similarities; the most accurate model took ~27 seconds per answer. **`gpt-5.4-mini` matched it closely in 4–18 seconds** and became the default.
 
-### Treating LLM output as untrusted input
-- One AI service layer with JSON mode, automatic retry and truncation detection.
-- Every response passes through typed sanitizers (`lib/ai/sanitize.ts`) — enums checked, strings length-capped, years range-checked, duplicates removed.
-- Formulas are normalised to exactly 100% and sorted by note layer.
-- User input is length-limited and embedded as data, not instructions.
+### Real data first, AI second
+Lookups check Fragrantica first, then the model's own knowledge, and only then run a live web search for niche and indie perfumes the AI has never seen — so well-known perfumes stay fast and cheap, and every web result links to its sources. A brand check rejects answers about the wrong perfume ("Red by Sora Dora" isn't *Red* by Giorgio Beverly Hills).
 
-### Combining real data with AI
-Perfume lookups query **Fragrantica first** (in parallel) for the published note pyramid, accords and community rating, and run the AI lookup concurrently for descriptive fields — then merge them, with Fragrantica winning on facts. The UI shows where the notes came from, so users know when to double-check.
+### A full-stack shelf with a privacy-safe public page
+- Postgres database with versioned migrations and rules enforced in the database itself.
+- The public collection reads from a query that only selects approved fields, so private notes, bottle sizes, wishlist items and photos can't leak — even by accident.
+- Product photos are found on brand and retailer sites, cropped to the bottle, stored privately, and turned into consistent upright studio renders by an image model.
+
+![My private shelf with AI studio renders](docs/screenshots/shelf.jpg)
 
 ### Security
-- Every page and API route is behind a password login with signed session cookies and login rate limiting.
-- Audited dependencies and upgraded Next.js to close known login-bypass vulnerabilities, then tested the fix by trying to break in (forged cookies, URL tricks).
-
-### Design & accessibility
-A custom design system with one colour per note layer (top, heart, base) used across every view — keyboard-friendly, screen-reader labelled and responsive down to phone width.
-
-![Materials library on mobile](docs/screenshots/materials-mobile.jpg)
+- Every page and API route sits behind a password login with signed sessions and rate limiting; I upgraded Next.js to close known login-bypass vulnerabilities and tested the fix by trying to break in.
+- The server downloads images from addresses found on the web, so every download is checked against private and internal networks. Testing caught a real bypass in an early version, which I fixed.
+- Uploaded photos are re-encoded to strip hidden data such as phone GPS location.
 
 ---
 
 ## Tech stack
 
-- **Framework:** Next.js 16.4 (App Router, Turbopack)
-- **Language:** TypeScript
-- **UI:** React 19, Tailwind CSS 4 (`@theme` design tokens), `next/font`
-- **AI:** OpenAI Node SDK, JSON mode; swappable provider with an offline mock
-- **Auth:** custom proxy gate + signed cookie sessions (Web Crypto HMAC-SHA256)
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4 — custom, responsive, accessible design system
+- **Backend:** Next.js route handlers, Neon Postgres, Vercel Blob
+- **AI:** OpenAI GPT-5.x (with web search) and image generation
 - **Hosting:** Vercel
-
-## Architecture
-
-```txt
-Browser ──► proxy.ts (login gate) ──► Route handlers (app/api/*)
-                                         │
-                                         ├─► lib/ai/prompts.ts      prompt + shared perfumery reference
-                                         ├─► lib/ai/openai-service  JSON mode, retries, model config
-                                         ├─► lib/ai/sanitize.ts     validate untrusted model output
-                                         └─► Fragrantica            real note pyramids (perfume lookup)
-```
-
