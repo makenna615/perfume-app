@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="juice" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c98443"/>
+      <stop offset="1" stop-color="#985627"/>
+    </linearGradient>
+    <clipPath id="body">
+      <path d="M8.5 15c0-2 1.6-3.5 3.5-3.5h8c1.9 0 3.5 1.5 3.5 3.5v9.5c0 2.2-1.8 4-4 4h-7c-2.2 0-4-1.8-4-4z"/>
+    </clipPath>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#1e1a16"/>
+  <!-- cap and neck -->
+  <rect x="12" y="3" width="8" height="5.5" rx="1.2" fill="#f4efe7"/>
+  <rect x="14" y="8.5" width="4" height="3" fill="#c4b6a2"/>
+  <!-- glass body with amber juice -->
+  <path d="M8.5 15c0-2 1.6-3.5 3.5-3.5h8c1.9 0 3.5 1.5 3.5 3.5v9.5c0 2.2-1.8 4-4 4h-7c-2.2 0-4-1.8-4-4z" fill="#f4efe7"/>
+  <path clip-path="url(#body)" d="M6 19.5c2.5-1.2 5-1.2 7.5 0s5 1.2 7.5 0 5-1.2 6 0V31H6z" fill="url(#juice)"/>
+  <!-- glass highlight -->
+  <path d="M11 15v4.5" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" opacity="0.85"/>
+</svg>

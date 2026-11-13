@@ -4,10 +4,12 @@ import { authCookieName, verifySessionToken } from "@/lib/auth/session";
 // Exact-match public pages. /collection is the read-only public shelf (no APIs, no AI).
 const PUBLIC_PATHS = new Set(["/login", "/collection"]);
 
-// Only Next's own build assets and the favicon skip the login check.
+// Only Next's own build assets and the app icons (exact paths) skip the login check.
 // (A broad "any path ending in .js/.css/.txt…" rule is easy to abuse to skip auth.)
+const PUBLIC_ICONS = new Set(["/favicon.ico", "/icon.svg", "/apple-icon.png"]);
+
 function isStaticAsset(pathname: string): boolean {
-  return pathname.startsWith("/_next/") || pathname === "/favicon.ico";
+  return pathname.startsWith("/_next/") || PUBLIC_ICONS.has(pathname);
 }
 
 export async function proxy(request: NextRequest) {
