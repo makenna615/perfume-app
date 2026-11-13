@@ -2,8 +2,8 @@
 
 **An AI-powered fragrance studio: find perfumes that truly smell alike, look up accurate note pyramids, and turn a memory into a perfume formula you can actually mix.**
 
-**See it live:** [my perfume collection](https://perfume-app-ruby.vercel.app/collection) — public, no login needed.
-The full app at https://perfume-app-ruby.vercel.app is password-protected (access by invitation).
+**See it live:** [my perfume collection](https://memories-into-perfumes.vercel.app/collection) — public, no login needed.
+The full app at https://memories-into-perfumes.vercel.app is password-protected (access by invitation).
 
 ![Home page](docs/screenshots/home.jpg)
 
@@ -26,7 +26,7 @@ Building it brought its own challenge. General-purpose AI is confidently wrong a
 | **Discover** | Find alternatives to a perfume — labelled as a near-identical dupe, close alternative, flanker or same family, with the notes they really share and how they differ. Look up any perfume's note pyramid, accords, performance and best seasons — including niche and indie releases, found via web search with links to the sources. |
 | **Compose** | Describe a memory ("a rainy pine forest at dusk"), list the materials on your shelf, or name a perfume to reinterpret. Get a weighable formula of real, purchasable materials at realistic levels, with safety notes and a batch calculator for any strength and bottle size. |
 | **Materials** | Learn what's behind a note — e.g. "white musk" → Galaxolide, Habanolide, Ethylene Brassylate — with typical usage, dilution, allergens and safety restrictions. |
-| **Shelf** | My collection, bottle by bottle — add perfumes one at a time or paste a whole list. Each bottle stands in a lit display niche as an AI studio render made from the brand's real product photo. A [read-only public version](https://perfume-app-ruby.vercel.app/collection) shows the collection to visitors. |
+| **Shelf** | My collection, bottle by bottle — add perfumes one at a time or paste a whole list. Each bottle stands in a lit display niche as an AI studio render made from the brand's real product photo. A [read-only public version](https://memories-into-perfumes.vercel.app/collection) shows the collection to visitors. |
 
 ![The public collection](docs/screenshots/collection.jpg)
 
