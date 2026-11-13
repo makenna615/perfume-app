@@ -70,3 +70,26 @@ export function noteRole(value: unknown): (typeof NOTE_ROLES)[number] | undefine
 
 /** Hard cap on free-text user input sent to the model. */
 export const MAX_INPUT_LENGTH = 400;
+
+/** Keeps only well-formed http(s) links (max 5) — blocks javascript:, data: and other schemes. */
+export function sanitizeSources(value: unknown): Array<{ url: string; title?: string }> {
+  if (!Array.isArray(value)) return [];
+  const out: Array<{ url: string; title?: string }> = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const o = obj(item);
+    const raw = str(o?.url, 500);
+    if (!raw) continue;
+    try {
+      const url = new URL(raw);
+      if ((url.protocol !== "https:" && url.protocol !== "http:") || seen.has(url.href)) continue;
+      seen.add(url.href);
+      const title = str(o?.title, 120);
+      out.push(title ? { url: url.href, title } : { url: url.href });
+    } catch {
+      continue;
+    }
+    if (out.length >= 5) break;
+  }
+  return out;
+}

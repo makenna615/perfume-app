@@ -7,14 +7,15 @@ import {
   PerfumeIntelligenceSuggestion,
 } from "@/types";
 import { getAIService } from "@/lib/ai/factory";
-import { getPageExtractionPrompt, getPerfumeIntelligencePrompt } from "@/lib/ai/prompts";
-import { AIServiceError } from "@/lib/ai/types";
+import { getPageExtractionPrompt, getPerfumeIntelligencePrompt, getWebPerfumePrompt } from "@/lib/ai/prompts";
+import { AIServiceError, type WebSource } from "@/lib/ai/types";
 import {
   CONFIDENCE,
   MAX_INPUT_LENGTH,
   PRICE_TIERS,
   obj,
   oneOf,
+  sanitizeSources,
   str,
   strArr,
   year,
@@ -291,6 +292,8 @@ function sanitizeSuggestions(value: unknown, fallbackReason: string): PerfumeInt
   return (Array.isArray(value) ? value : [])
     .map(obj)
     .filter((item): item is Record<string, unknown> => Boolean(item && str(item.name) && str(item.brand)))
+    // Drop placeholder brands the model sometimes emits instead of admitting it does not know.
+    .filter((item) => !/^(n\/?a|none|null|unknown|various|-)$/i.test(str(item.brand) ?? ""))
     .slice(0, 6)
     .map((item) => ({
       name: str(item.name, 120)!,
@@ -299,16 +302,20 @@ function sanitizeSuggestions(value: unknown, fallbackReason: string): PerfumeInt
     }));
 }
 
-function sanitizeModelResponse(raw: Record<string, unknown>): PerfumeIntelligenceResponse {
+function sanitizeModelResponse(
+  raw: Record<string, unknown>,
+  source: "ai" | "web" = "ai",
+  sources: WebSource[] = []
+): PerfumeIntelligenceResponse {
   const confidence = oneOf(raw.confidence, CONFIDENCE) ?? "low";
   const p = obj(raw.perfume);
   const notesRaw = obj(p?.notes);
   const performance = obj(p?.performance);
 
   const notes = {
-    top: strArr(notesRaw?.top, 8),
-    middle: strArr(notesRaw?.middle, 10),
-    base: strArr(notesRaw?.base, 8),
+    top: strArr(notesRaw?.top, 10),
+    middle: strArr(notesRaw?.middle, 16), // linear (flat) note lists live here
+    base: strArr(notesRaw?.base, 10),
   };
   const hasNotes = notes.top.length + notes.middle.length + notes.base.length > 0;
 
@@ -347,7 +354,8 @@ function sanitizeModelResponse(raw: Record<string, unknown>): PerfumeIntelligenc
     occasions: strArr(p.occasions, 5, 30),
     priceTier: oneOf(p.priceTier, PRICE_TIERS),
     availability: buildSearchLinks(name, brand),
-    source: "ai",
+    source,
+    ...(source === "web" ? { sources: sanitizeSources(sources) } : {}),
   };
 
   return { found: true, confidence, ambiguous: false, perfume, alternatives, suggestions: [] };
@@ -402,6 +410,41 @@ function mergeWithFragrantica(
 // Handler
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Web search fallback
+// ---------------------------------------------------------------------------
+
+/** Does the brand in the result plausibly match the brand the user typed? */
+function brandMatches(hint: string, brand: string): boolean {
+  const a = normalizeTitle(hint);
+  const b = normalizeTitle(brand);
+  if (!a || !b || a.includes(b) || b.includes(a)) return true;
+  // Initials: "MFK" → Maison Francis Kurkdjian, "YSL" → Yves Saint Laurent.
+  const initials = b.split(" ").filter(Boolean).map((t) => t[0]).join("");
+  if (initials.length >= 2 && a.replace(/\s/g, "") === initials) return true;
+  // Shared distinctive word, tolerant of small misspellings ("Gillies" ~ "Gillie").
+  const words = (s: string) => s.split(" ").filter((t) => t.length >= 4);
+  return words(a).some((x) => words(b).some((y) => x.startsWith(y.slice(0, 5)) || y.startsWith(x.slice(0, 5))));
+}
+
+async function webLookup(query: string, brandHint?: string): Promise<PerfumeIntelligenceResponse | null> {
+  try {
+    const { data, sources } = await getAIService().searchWebJSON({
+      task: "web-perfume",
+      ...getWebPerfumePrompt(query),
+    });
+    const result = sanitizeModelResponse(data, "web", sources);
+    if (result.perfume && brandHint && !brandMatches(brandHint, result.perfume.brand)) {
+      return { ...result, found: false, perfume: null, alternatives: [] };
+    }
+    return result;
+  } catch (error) {
+    // A failed web search must never break the lookup — fall back to "not found".
+    console.warn("Web perfume lookup failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as { perfumeName?: unknown };
@@ -447,6 +490,23 @@ export async function POST(request: NextRequest) {
     let result = sanitizeModelResponse(modelRaw);
     if (fragData) {
       result = mergeWithFragrantica(result, fragData);
+    }
+
+    // The model answered about a different brand than the user named (e.g. "Red by Sora Dora"
+    // → "Red by Giorgio Beverly Hills"). That's the wrong perfume: treat it as not found.
+    if (!fragData && result.perfume && brandHint && !brandMatches(brandHint, result.perfume.brand)) {
+      result = { ...result, found: false, perfume: null, alternatives: [] };
+    }
+
+    // Niche / indie perfumes the model doesn't know: search the web. Slower and costlier,
+    // so it only runs when the faster sources came up empty.
+    if (!result.found) {
+      const web = await webLookup(perfumeName, brandHint);
+      if (web?.found) {
+        result = web;
+      } else if (web && result.suggestions.length === 0) {
+        result = { ...result, suggestions: web.suggestions };
+      }
     }
 
     // Drop "alternatives" that are just the found perfume itself.

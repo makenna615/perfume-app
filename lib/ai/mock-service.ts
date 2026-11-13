@@ -1,4 +1,4 @@
-import { AIRequest, AIService } from "./types";
+import { AIRequest, AIService, AIServiceError, WebJSONResult } from "./types";
 
 // Offline fallback used when AI_PROVIDER=mock or no API key is configured.
 // The sample data is factually accurate so the UI can be developed against it.
@@ -125,6 +125,15 @@ const DETAILS = {
 };
 
 export class MockAIService implements AIService {
+  // Offline: no web access, so web lookups always come back "not found".
+  async renderFromReference(): Promise<Buffer> {
+    throw new AIServiceError("Bottle renders need an OpenAI API key.", 503);
+  }
+
+  async searchWebJSON(): Promise<WebJSONResult> {
+    return { data: { found: false, perfume: null }, sources: [] };
+  }
+
   async generateJSON(request: AIRequest): Promise<Record<string, unknown>> {
     switch (request.task) {
       case "similar-perfumes":

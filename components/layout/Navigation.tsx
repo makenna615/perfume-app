@@ -9,6 +9,7 @@ const links = [
   { href: "/discover", label: "Discover", numeral: "I" },
   { href: "/builder", label: "Compose", numeral: "II" },
   { href: "/ingredients", label: "Materials", numeral: "III" },
+  { href: "/shelf", label: "Shelf", numeral: "IV" },
 ];
 
 export default function Navigation() {
@@ -18,6 +19,20 @@ export default function Navigation() {
 
   if (pathname === "/login") {
     return null;
+  }
+
+  // Public collection page: visitors get the wordmark only — no links into the private app.
+  if (pathname === "/collection") {
+    return (
+      <header className="border-b border-line bg-paper/90">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-5 sm:px-8">
+          <PerfumeLogoIcon className="h-8 w-8 text-ink" />
+          <span className="font-display text-xl leading-none tracking-tight">
+            Memories <span className="italic text-ink-soft">into</span> Perfumes
+          </span>
+        </div>
+      </header>
+    );
   }
 
   const handleLogout = async () => {

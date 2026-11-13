@@ -8,7 +8,10 @@ export type AITask =
   | "formula"
   | "ingredient-search"
   | "perfume-details"
-  | "page-extraction";
+  | "page-extraction"
+  | "bottle"
+  | "web-perfume"
+  | "product-page";
 
 export interface AIRequest {
   task: AITask;
@@ -21,9 +24,24 @@ export interface AIRequest {
   maxTokens?: number;
 }
 
+export interface WebSource {
+  url: string;
+  title?: string;
+}
+
+export interface WebJSONResult {
+  data: Record<string, unknown>;
+  /** Pages the search tool actually consulted (reported by the API, not written by the model). */
+  sources: WebSource[];
+}
+
 export interface AIService {
   /** Returns the parsed JSON object produced by the model. Throws AIServiceError on failure. */
   generateJSON(request: AIRequest): Promise<Record<string, unknown>>;
+  /** Like generateJSON, but the model may search the web first. Slower and costlier — use as a fallback. */
+  searchWebJSON(request: AIRequest): Promise<WebJSONResult>;
+  /** Image-to-image: returns a PNG (transparent background) based on the reference photo. */
+  renderFromReference(reference: Buffer, prompt: string): Promise<Buffer>;
 }
 
 export class AIServiceError extends Error {

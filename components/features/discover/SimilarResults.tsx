@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { SimilarSearchResult } from "@/types";
 import Tag from "@/components/ui/Tag";
 import { PRICE_TIER_LABEL, RELATIONSHIP_LABEL } from "@/lib/format";
+import { useShelf } from "@/lib/hooks/useShelf";
 
 interface SimilarResultsProps {
   result: SimilarSearchResult;
@@ -10,6 +13,7 @@ interface SimilarResultsProps {
 }
 
 export default function SimilarResults({ result, mode, onViewDetails }: SimilarResultsProps) {
+  const shelf = useShelf();
   const { reference, results } = result;
 
   return (
@@ -61,6 +65,7 @@ export default function SimilarResults({ result, mode, onViewDetails }: SimilarR
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Tag tone={perfume.relationship === "dupe" ? "resin" : "neutral"}>{RELATIONSHIP_LABEL[perfume.relationship]}</Tag>
+                {shelf.has(perfume.name, perfume.brand) && <Tag tone="base">✓ On your shelf</Tag>}
                 {perfume.priceTier && <Tag>{PRICE_TIER_LABEL[perfume.priceTier]}</Tag>}
               </div>
 

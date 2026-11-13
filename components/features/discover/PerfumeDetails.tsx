@@ -5,6 +5,8 @@ import NotePyramid from "@/components/features/NotePyramid";
 import Tag from "@/components/ui/Tag";
 import Card from "@/components/ui/Card";
 import { buttonClass } from "@/components/ui/Button";
+import AddToShelfButton from "@/components/features/shelf/AddToShelfButton";
+import SourceLinks from "@/components/features/SourceLinks";
 import { PRICE_TIER_LABEL, capitalize } from "@/lib/format";
 
 const LONGEVITY_STEPS = ["poor", "moderate", "long-lasting", "very long-lasting"] as const;
@@ -52,24 +54,29 @@ export default function PerfumeDetails({ data, onSelect }: PerfumeDetailsProps) 
           )}
         </div>
         <div className="flex flex-col items-start gap-2 md:items-end">
+          <AddToShelfButton perfume={perfume} />
           {perfume.community && (
             <p className="text-sm text-ink-soft">
               <span className="tabular text-2xl text-ink">{perfume.community.rating.toFixed(2)}</span>
               <span className="text-ink-faint"> / 5 · {perfume.community.reviewsCount.toLocaleString()} votes on Fragrantica</span>
             </p>
           )}
-          <span className="text-xs text-ink-faint">
-            {perfume.source === "fragrantica" ? (
-              <>
-                Notes from{" "}
-                <a className="link" href={perfume.sourceUrl} target="_blank" rel="noreferrer">
-                  Fragrantica
-                </a>
-              </>
-            ) : (
-              <>Notes from AI knowledge ({data.confidence} confidence) — verify before relying on them</>
-            )}
-          </span>
+          {perfume.source === "web" ? (
+            <SourceLinks sources={perfume.sources} />
+          ) : (
+            <span className="text-xs text-ink-faint">
+              {perfume.source === "fragrantica" ? (
+                <>
+                  Notes from{" "}
+                  <a className="link" href={perfume.sourceUrl} target="_blank" rel="noopener noreferrer">
+                    Fragrantica
+                  </a>
+                </>
+              ) : (
+                <>Notes from AI knowledge ({data.confidence} confidence) — verify before relying on them</>
+              )}
+            </span>
+          )}
         </div>
       </header>
 

@@ -125,6 +125,11 @@ export interface Formula {
 // Perfume details ("intelligence")
 // ---------------------------------------------------------------------------
 
+export interface SourceLink {
+  url: string;
+  title?: string;
+}
+
 export interface PerfumeIntelligenceAvailability {
   store: string;
   region: string;
@@ -166,8 +171,10 @@ export interface PerfumeIntelligenceDetails {
     reviewsCount: number;
   };
   /** Where the note pyramid came from. */
-  source: "fragrantica" | "ai";
+  source: "fragrantica" | "ai" | "web";
   sourceUrl?: string;
+  /** Pages consulted when found via web search. */
+  sources?: SourceLink[];
 }
 
 export interface PerfumeIntelligenceSuggestion {
@@ -184,4 +191,92 @@ export interface PerfumeIntelligenceResponse {
   /** Perfumes from other brands sharing this name — shown alongside a found result. */
   alternatives: PerfumeIntelligenceSuggestion[];
   suggestions: PerfumeIntelligenceSuggestion[];
+}
+
+// ---------------------------------------------------------------------------
+// Perfume shelf
+// ---------------------------------------------------------------------------
+
+export type ShelfStatus = "full" | "decant" | "sample" | "wishlist" | "finished";
+
+export type BottleShape =
+  | "rectangle"
+  | "square"
+  | "round"
+  | "cylinder"
+  | "oval"
+  | "faceted"
+  | "flask"
+  | "tall";
+
+export type CapShape = "cube" | "cylinder" | "dome" | "tall" | "sphere" | "faceted" | "flat";
+
+/** Parameters for the generated bottle illustration. */
+export interface BottleSpec {
+  shape: BottleShape;
+  glassFinish: "clear" | "frosted" | "tinted" | "opaque";
+  glassColor: string; // #rrggbb
+  liquidColor: string; // #rrggbb
+  cap: {
+    shape: CapShape;
+    color: string; // #rrggbb
+    finish: "metallic" | "matte" | "glossy";
+  };
+  labelColor?: string; // #rrggbb
+  /** "known" = based on the real bottle; "approximate" = AI unsure; "generic" = fallback. */
+  accuracy: "known" | "approximate" | "generic";
+}
+
+/** Breakdown snapshot saved when a perfume is added (so browsing needs no AI calls). */
+export interface ShelfDetails {
+  releaseYear?: number;
+  perfumers: string[];
+  fragranceFamily?: string;
+  accords: Array<{ name: string; strength: "dominant" | "prominent" | "subtle" }>;
+  notesStructure: "pyramid" | "linear";
+  notes: { top: string[]; middle: string[]; base: string[] };
+  description?: string;
+  source?: "fragrantica" | "ai" | "web" | "manual";
+  sources?: SourceLink[];
+}
+
+/** A bottle photo as the browser sees it. Served only via an authenticated route. */
+export interface ShelfPhoto {
+  src: string; // /api/shelf/<id>/photo?v=<version> — the real product photo
+  renderSrc?: string; // AI studio render made from the photo, if generated
+  display: "render" | "photo" | "illustration"; // what the shelf shows
+  origin: "brand" | "upload";
+  sourceUrl?: string;
+  width: number;
+  height: number;
+}
+
+export interface ShelfPerfume {
+  id: string;
+  name: string;
+  brand: string;
+  concentration: string;
+  status: ShelfStatus;
+  sizeMl?: number;
+  rating?: number;
+  favorite: boolean;
+  privateNotes: string;
+  details: ShelfDetails;
+  bottle: BottleSpec;
+  photo?: ShelfPhoto;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the public /collection page may show — private fields are omitted by design. */
+export interface PublicShelfPerfume {
+  id: string;
+  name: string;
+  brand: string;
+  concentration: string;
+  status: Exclude<ShelfStatus, "wishlist">;
+  rating?: number;
+  favorite: boolean;
+  details: ShelfDetails;
+  bottle: BottleSpec;
 }

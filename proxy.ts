@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authCookieName, verifySessionToken } from "@/lib/auth/session";
 
-const PUBLIC_PATHS = new Set(["/login"]);
+// Exact-match public pages. /collection is the read-only public shelf (no APIs, no AI).
+const PUBLIC_PATHS = new Set(["/login", "/collection"]);
 
 // Only Next's own build assets and the favicon skip the login check.
 // (A broad "any path ending in .js/.css/.txt…" rule is easy to abuse to skip auth.)

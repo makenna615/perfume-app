@@ -180,9 +180,9 @@ export default function BuilderView() {
             <h2 className="text-4xl">Your notebook</h2>
             <span className="text-sm text-ink-faint">Saved in this browser</span>
           </div>
-          <ul className="grid gap-px overflow-hidden rounded-sm border border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid overflow-hidden rounded-sm border-l border-t border-line sm:grid-cols-2 lg:grid-cols-3">
             {notebook.formulas.map((saved) => (
-              <li key={saved.id} className="group relative bg-card p-5">
+              <li key={saved.id} className="group relative border-b border-r border-line bg-card p-5">
                 <button onClick={() => open(saved)} className="block w-full cursor-pointer text-left">
                   <p className="eyebrow mb-1">{saved.olfactiveFamily ?? "Formula"}</p>
                   <p className="font-display text-2xl leading-tight group-hover:text-resin">{saved.name}</p>

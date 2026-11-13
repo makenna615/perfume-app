@@ -134,7 +134,7 @@ export default function DiscoverView() {
       </form>
 
       <section className="mt-14" aria-live="polite">
-        {loading && <Loader label={COPY[searchedMode ?? mode].loading} detail="Answers are checked against published note lists where possible." />}
+        {loading && <Loader label={COPY[searchedMode ?? mode].loading} detail={searchedMode === "details" ? "Niche and indie perfumes are searched on the web, which can take up to 20 seconds." : "Answers are checked against published note lists where possible."} />}
 
         {!loading && error && <Notice tone="error">{error}</Notice>}
 
