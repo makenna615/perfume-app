@@ -3,8 +3,8 @@ import type { NoteRole } from "@/types";
 type Tone = NoteRole | "neutral" | "resin";
 
 const toneStyles: Record<Tone, string> = {
-  top: "bg-citrus-wash text-[#6e5518] border-citrus/30",
-  middle: "bg-heart-wash text-[#7a3348] border-heart/30",
+  top: "bg-citrus-wash text-citrus-deep border-citrus/30",
+  middle: "bg-heart-wash text-heart-deep border-heart/30",
   base: "bg-wood-wash text-wood border-wood/25",
   neutral: "bg-paper-deep text-ink-soft border-line",
   resin: "bg-resin-wash text-resin-deep border-resin/30",

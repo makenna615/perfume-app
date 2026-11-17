@@ -28,7 +28,9 @@ Building it brought its own challenge. General-purpose AI is confidently wrong a
 | **Materials** | Learn what's behind a note — e.g. "white musk" → Galaxolide, Habanolide, Ethylene Brassylate — with typical usage, dilution, allergens and safety restrictions. |
 | **Shelf** | My collection, bottle by bottle — add perfumes one at a time or paste a whole list. Each bottle stands in a lit display niche as an AI studio render made from the brand's real product photo. A [read-only public version](https://memories-into-perfumes.vercel.app/collection) shows the collection to visitors. |
 
-![The public collection](docs/screenshots/collection.jpg)
+![The public collection in dark mode](docs/screenshots/collection-dark.jpg)
+
+*The public collection in dark mode. The whole app has light and dark themes — it follows your device's setting, and a toggle in the header lets you change it.*
 
 ![Perfume details](docs/screenshots/perfume-details.jpg)
 
@@ -67,7 +69,7 @@ Lookups check Fragrantica first, then the model's own knowledge, and only then r
 
 ## Tech stack
 
-- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4 — custom, responsive, accessible design system
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4 — custom, responsive, accessible design system with light and dark themes
 - **Backend:** Next.js route handlers, Neon Postgres, Vercel Blob
 - **AI:** OpenAI GPT-5.x (with web search) and image generation
 - **Hosting:** Vercel

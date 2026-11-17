@@ -65,7 +65,7 @@ const PLANK = 12;
 const plankStyle: React.CSSProperties = {
   backgroundImage: `repeating-linear-gradient(to bottom,
     transparent 0, transparent ${ROW - PLANK}px,
-    #b98f63 ${ROW - PLANK}px, #a57b52 ${ROW - PLANK + 3}px, #8a6340 ${ROW}px)`,
+    var(--plank-top) ${ROW - PLANK}px, var(--plank-mid) ${ROW - PLANK + 3}px, var(--plank-bottom) ${ROW}px)`,
 };
 
 export function ShelfDisplay<T extends DisplayItem>({

@@ -1,6 +1,6 @@
 const toneStyles = {
   info: "border-line bg-paper-deep/60 text-ink-soft",
-  warning: "border-citrus/40 bg-citrus-wash/70 text-[#5f4a16]",
+  warning: "border-citrus/40 bg-citrus-wash/70 text-citrus-deep",
   error: "border-alert/30 bg-alert-wash text-alert",
 } as const;
 

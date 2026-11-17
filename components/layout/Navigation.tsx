@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import PerfumeLogoIcon from "@/components/ui/PerfumeLogoIcon";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const links = [
   { href: "/discover", label: "Discover", numeral: "I" },
@@ -30,6 +31,7 @@ export default function Navigation() {
           <span className="font-display text-xl leading-none tracking-tight">
             Memories <span className="italic text-ink-soft">into</span> Perfumes
           </span>
+          <ThemeToggle className="ml-auto" />
         </div>
       </header>
     );
@@ -82,18 +84,22 @@ export default function Navigation() {
           >
             Log out
           </button>
+          <ThemeToggle />
         </nav>
 
-        <button
-          className="flex h-10 w-10 cursor-pointer flex-col items-center justify-center gap-1.5 md:hidden"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          aria-label={open ? "Close menu" : "Open menu"}
-        >
-          <span className={`h-px w-5 bg-ink transition-transform ${open ? "translate-y-[3.5px] rotate-45" : ""}`} />
-          <span className={`h-px w-5 bg-ink transition-transform ${open ? "-translate-y-[3.5px] -rotate-45" : ""}`} />
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          <ThemeToggle />
+          <button
+            className="flex h-10 w-10 cursor-pointer flex-col items-center justify-center gap-1.5"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? "Close menu" : "Open menu"}
+          >
+            <span className={`h-px w-5 bg-ink transition-transform ${open ? "translate-y-[3.5px] rotate-45" : ""}`} />
+            <span className={`h-px w-5 bg-ink transition-transform ${open ? "-translate-y-[3.5px] -rotate-45" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {open && (

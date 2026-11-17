@@ -34,7 +34,7 @@ export default function Modal({ isOpen, onClose, title, subtitle, children }: Mo
 
   return createPortal(
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-ink/30" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-scrim" onClick={onClose} aria-hidden />
       <div
         ref={panelRef}
         tabIndex={-1}

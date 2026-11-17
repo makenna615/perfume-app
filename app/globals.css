@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `dark:` follows the data-theme attribute the inline script in app/layout.tsx sets before paint. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /*
  * Memories Into Perfumes — design tokens.
  * An editorial, apothecary feel: warm paper, ink, a resin accent, and one colour
@@ -20,8 +23,10 @@
   --color-resin-wash: #f1e2d2;
 
   --color-citrus: #b08a2e;
+  --color-citrus-deep: #6e5518;
   --color-citrus-wash: #f3ead2;
   --color-heart: #a9536a;
+  --color-heart-deep: #7a3348;
   --color-heart-wash: #f4e1e4;
   --color-wood: #5d4535;
   --color-wood-wash: #e9e0d7;
@@ -29,6 +34,9 @@
   --color-moss: #56653f;
   --color-alert: #9c3a2b;
   --color-alert-wash: #f6e3dc;
+
+  /* Modal backdrop: always a dark veil, in both themes. */
+  --color-scrim: rgb(30 26 22 / 0.3);
 
   --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
@@ -61,6 +69,73 @@
   }
 }
 
+/*
+ * Display niche, shelf plank and grain: not Tailwind colours, just values the bottle
+ * display and shelf read through var(), so they can change with the theme.
+ */
+:root {
+  color-scheme: light;
+  --niche-wall:
+    radial-gradient(70% 45% at 50% 6%, rgba(255, 252, 245, 0.98), rgba(255, 250, 240, 0) 70%),
+    linear-gradient(180deg, #f3ebe0 0%, #e9dfd1 55%, #ddd0be 100%);
+  --niche-rim: rgba(255, 255, 255, 0.6);
+  --niche-inset: inset 0 10px 18px -12px rgba(60, 40, 20, 0.35), inset 0 -6px 12px -10px rgba(60, 40, 20, 0.25);
+  --niche-floor: linear-gradient(180deg, #e7ddd0, #d9cbb8);
+  --niche-edge: rgba(255, 255, 255, 0.7);
+  --niche-contact: rgba(0, 0, 0, 0.25);
+  --niche-reflection: 0.25;
+  --bottle-shadow: rgba(40, 25, 10, 0.18);
+  --photo-blend: multiply;
+  --plank-top: #b98f63;
+  --plank-mid: #a57b52;
+  --plank-bottom: #8a6340;
+  --grain-opacity: 0.35;
+}
+
+/* Dark: "an amber bottle at night" — warm near-black, cream ink, brighter accents. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #15110e;
+  --color-paper-deep: #1b1612;
+  --color-card: #1f1915;
+  --color-ink: #f2eadf;
+  --color-ink-soft: #c9bdaf;
+  --color-ink-faint: #968a7d;
+  --color-line: #342b24;
+  --color-line-strong: #4b3f35;
+  --color-resin: #d9915a;
+  --color-resin-deep: #f0b27f;
+  --color-resin-wash: #3b2818;
+  --color-citrus: #d6b25c;
+  --color-citrus-deep: #e8c97f;
+  --color-citrus-wash: #332a12;
+  --color-heart: #df8aa0;
+  --color-heart-deep: #eda9ba;
+  --color-heart-wash: #3a1f28;
+  --color-wood: #c19c80;
+  --color-wood-wash: #2c231c;
+  --color-moss: #9db07b;
+  --color-alert: #e8806b;
+  --color-alert-wash: #3d1e17;
+  --color-scrim: rgb(0 0 0 / 0.6);
+
+  --niche-wall:
+    radial-gradient(70% 45% at 50% 6%, rgba(255, 214, 160, 0.26), rgba(255, 200, 140, 0) 70%),
+    linear-gradient(180deg, #2c241e 0%, #241d18 55%, #1c1612 100%);
+  --niche-rim: rgba(255, 230, 200, 0.1);
+  --niche-inset: inset 0 10px 18px -12px rgba(0, 0, 0, 0.6), inset 0 -6px 12px -10px rgba(0, 0, 0, 0.5);
+  --niche-floor: linear-gradient(180deg, #2a221c, #1f1914);
+  --niche-edge: rgba(255, 230, 200, 0.12);
+  --niche-contact: rgba(0, 0, 0, 0.55);
+  --niche-reflection: 0.18;
+  --bottle-shadow: rgba(0, 0, 0, 0.45);
+  --photo-blend: normal;
+  --plank-top: #6f5236;
+  --plank-mid: #5a4129;
+  --plank-bottom: #3e2c1b;
+  --grain-opacity: 0.5;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -81,7 +156,7 @@
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.35;
+    opacity: var(--grain-opacity);
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.28  0 0 0 0 0.2  0 0 0 0.09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
 

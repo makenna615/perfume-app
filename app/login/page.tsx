@@ -6,6 +6,7 @@ import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import Notice from "@/components/ui/Notice";
 import PerfumeLogoIcon from "@/components/ui/PerfumeLogoIcon";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 /** Only allow same-origin paths after login (blocks "//evil.com" and "/\evil.com"). */
 function isSafeRedirect(candidate: string | null): candidate is string {
@@ -63,7 +64,8 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center px-5">
+    <div className="relative flex min-h-[80vh] items-center justify-center px-5">
+      <ThemeToggle className="absolute right-5 top-5" />
       <div className="w-full max-w-sm animate-rise">
         <PerfumeLogoIcon className="mb-8 h-10 w-10 text-ink" />
         <p className="eyebrow mb-3">Private studio</p>

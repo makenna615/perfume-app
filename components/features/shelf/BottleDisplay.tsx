@@ -30,7 +30,7 @@ function Visual({ bottle, status, photo, size, label, decorative = false }: Bott
         loading="lazy"
         decoding="async"
         draggable={false}
-        className={`${s.photo} h-auto w-auto object-contain drop-shadow-[0_6px_6px_rgba(40,25,10,0.18)]`}
+        className={`${s.photo} h-auto w-auto object-contain drop-shadow-[0_6px_6px_var(--bottle-shadow)]`}
         style={{
           opacity: status === "wishlist" ? 0.55 : 1,
           filter: status === "finished" ? "saturate(0.6)" : undefined,
@@ -47,9 +47,10 @@ function Visual({ bottle, status, photo, size, label, decorative = false }: Bott
         loading="lazy"
         decoding="async"
         draggable={false}
-        className={`${s.photo} h-auto w-auto object-contain mix-blend-multiply`}
+        className={`${s.photo} h-auto w-auto object-contain`}
         // Feather the edges so studio backdrops melt into the niche instead of reading as a rectangle.
         style={{
+          mixBlendMode: "var(--photo-blend)" as React.CSSProperties["mixBlendMode"], // multiply on light, off on dark
           maskImage: "radial-gradient(ellipse 72% 78% at 50% 52%, #000 62%, transparent 100%)",
           WebkitMaskImage: "radial-gradient(ellipse 72% 78% at 50% 52%, #000 62%, transparent 100%)",
           opacity: status === "wishlist" ? 0.55 : 1,
@@ -71,16 +72,14 @@ export default function BottleDisplay({ size = "shelf", ...props }: BottleDispla
   return (
     <div className="relative flex flex-col items-center" style={{ perspective: "700px" }}>
       {/* back wall + spotlight */}
-      <div className={`relative flex ${s.stage} items-end justify-center overflow-hidden rounded-t-[999px] border border-b-0 border-white/60`}
+      <div className={`relative flex ${s.stage} items-end justify-center overflow-hidden rounded-t-[999px] border border-b-0 border-[var(--niche-rim)]`}
         style={{
-          background:
-            "radial-gradient(70% 45% at 50% 6%, rgba(255,252,245,0.98), rgba(255,250,240,0) 70%)," +
-            "linear-gradient(180deg, #f3ebe0 0%, #e9dfd1 55%, #ddd0be 100%)",
-          boxShadow: "inset 0 10px 18px -12px rgba(60,40,20,0.35), inset 0 -6px 12px -10px rgba(60,40,20,0.25)",
+          background: "var(--niche-wall)", // theme-aware, defined in globals.css
+          boxShadow: "var(--niche-inset)",
         }}
       >
         {/* contact shadow */}
-        <span className="absolute bottom-0 left-1/2 h-3 w-3/5 -translate-x-1/2 translate-y-1/2 rounded-[50%] bg-black/25 blur-[3px]" aria-hidden />
+        <span className="absolute bottom-0 left-1/2 h-3 w-3/5 -translate-x-1/2 translate-y-1/2 rounded-[50%] bg-[var(--niche-contact)] blur-[3px]" aria-hidden />
         <div className="relative z-10 origin-bottom transition-transform duration-500 ease-out group-hover:[transform:rotateY(-14deg)_translateY(-3px)] group-focus-within:[transform:rotateY(-14deg)_translateY(-3px)]">
           <Visual {...props} size={size} />
         </div>
@@ -89,15 +88,16 @@ export default function BottleDisplay({ size = "shelf", ...props }: BottleDispla
       {/* glossy floor with a faded reflection */}
       <div
         className={`relative w-full overflow-hidden ${s.floor}`}
-        style={{ background: "linear-gradient(180deg, #e7ddd0, #d9cbb8)" }}
+        style={{ background: "var(--niche-floor)" }}
         aria-hidden
       >
         {/* Same-height layer as the stage, mirrored as a whole: the bottle’s base lands on the
             floor edge. The mask (in pre-flip coordinates) keeps only the base, fading out. */}
         <div
-          className={`absolute inset-x-0 top-0 flex ${s.height} items-end justify-center opacity-25`}
+          className={`absolute inset-x-0 top-0 flex ${s.height} items-end justify-center`}
           style={{
             transform: "scaleY(-1)",
+            opacity: "var(--niche-reflection)",
             maskImage: "linear-gradient(to top, #000 0%, transparent 28%)",
             WebkitMaskImage: "linear-gradient(to top, #000 0%, transparent 28%)",
           }}
@@ -105,7 +105,7 @@ export default function BottleDisplay({ size = "shelf", ...props }: BottleDispla
           <Visual {...props} size={size} decorative />
         </div>
         {/* front edge highlight of the glass shelf */}
-        <span className="absolute inset-x-0 top-0 h-px bg-white/70" />
+        <span className="absolute inset-x-0 top-0 h-px bg-[var(--niche-edge)]" />
       </div>
     </div>
   );
