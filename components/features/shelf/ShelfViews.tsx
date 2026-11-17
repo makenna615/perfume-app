@@ -101,11 +101,6 @@ export function ShelfDisplay<T extends DisplayItem>({
                   {item.name}
                   <span className="block text-[11px] text-paper/70">{item.brand}</span>
                 </span>
-                {item.favorite && (
-                  <span className="absolute right-3 top-6 z-20 text-sm text-heart" aria-label="Favorite">
-                    ♥
-                  </span>
-                )}
               </li>
             ))}
           </ul>
