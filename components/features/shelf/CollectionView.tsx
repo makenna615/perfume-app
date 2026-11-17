@@ -15,7 +15,7 @@ export default function CollectionView({ items }: { items: PublicShelfPerfume[] 
 
   return (
     <>
-      <ShelfBrowser items={items} statuses={PUBLIC_STATUSES} onSelect={setSelected} />
+      <ShelfBrowser items={items} statuses={PUBLIC_STATUSES} onSelect={setSelected} defaultView="grid" />
       <Modal isOpen={Boolean(selected)} onClose={close} title={selected?.name ?? ""} subtitle={selected?.brand}>
         {selected && <PublicPerfumeSheet item={selected} />}
       </Modal>

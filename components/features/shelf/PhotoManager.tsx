@@ -109,7 +109,7 @@ export default function PhotoManager({ item }: { item: ShelfPerfume }) {
             ? "Using your own photo."
             : `Photo from ${source ?? "the brand's site"}.`
           : "Showing an illustration. Find the brand's photo (an AI render is made from it) or upload your own."}{" "}
-        <span className="text-ink-faint">Photos and renders are private — the public collection shows illustrations.</span>
+        <span className="text-ink-faint">The real photo stays private — the public collection shows the render when “Render” is selected, otherwise the illustration.</span>
       </p>
 
       <div className="flex flex-wrap gap-2">

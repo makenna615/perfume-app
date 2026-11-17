@@ -268,6 +268,12 @@ export interface ShelfPerfume {
   updatedAt: string;
 }
 
+/** The only image the public page gets: the AI render (never the original product photo). */
+export interface PublicShelfPhoto {
+  display: "render";
+  renderSrc: string; // /collection/render/<id>?v=<version>
+}
+
 /** What the public /collection page may show — private fields are omitted by design. */
 export interface PublicShelfPerfume {
   id: string;
@@ -279,4 +285,5 @@ export interface PublicShelfPerfume {
   favorite: boolean;
   details: ShelfDetails;
   bottle: BottleSpec;
+  photo?: PublicShelfPhoto; // only when the owner chose "Render" for this bottle
 }

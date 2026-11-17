@@ -1,14 +1,14 @@
 "use client";
 
-import type { ShelfPerfume, ShelfStatus } from "@/types";
+import type { PublicShelfPhoto, ShelfPerfume, ShelfPhoto, ShelfStatus } from "@/types";
 import BottleDisplay from "@/components/features/shelf/BottleDisplay";
 import { STATUS_LABEL } from "@/lib/shelf/model";
 
 /** Fields both the private shelf and the public collection provide. */
 export type DisplayItem = Pick<
   ShelfPerfume,
-  "id" | "name" | "brand" | "concentration" | "rating" | "favorite" | "details" | "bottle" | "photo"
-> & { status: ShelfStatus };
+  "id" | "name" | "brand" | "concentration" | "rating" | "favorite" | "details" | "bottle"
+> & { status: ShelfStatus; photo?: ShelfPhoto | PublicShelfPhoto };
 
 export type GroupBy = "family" | "brand" | "status" | "none";
 

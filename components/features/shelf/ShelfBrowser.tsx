@@ -17,13 +17,16 @@ export default function ShelfBrowser<T extends DisplayItem>({
   items,
   onSelect,
   statuses,
+  defaultView = "shelf",
 }: {
   items: T[];
   onSelect: (item: T) => void;
   /** Status filters to offer (the public page omits wishlist). */
   statuses: ShelfStatus[];
+  /** View shown first (the public page starts in the grid, where names are visible). */
+  defaultView?: View;
 }) {
-  const [view, setView] = useState<View>("shelf");
+  const [view, setView] = useState<View>(defaultView);
   const [groupBy, setGroupBy] = useState<GroupBy>("family");
   const [sort, setSort] = useState<Sort>("brand");
   const [query, setQuery] = useState("");

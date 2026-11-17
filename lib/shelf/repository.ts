@@ -58,6 +58,9 @@ function toPublicPerfume(row: Row): PublicShelfPerfume {
     favorite: Boolean(row.favorite),
     details,
     bottle: sanitizeBottle(row.bottle, details.fragranceFamily),
+    ...(typeof row.render_version === "string" && row.render_version
+      ? { photo: { display: "render" as const, renderSrc: `/collection/render/${row.id}?v=${encodeURIComponent(row.render_version)}` } }
+      : {}),
   };
 }
 
@@ -67,14 +70,29 @@ export async function listShelf(): Promise<ShelfPerfume[]> {
   return rows.map(toShelfPerfume);
 }
 
-/** Public view: only allow-listed columns, never wishlist items. */
+/**
+ * Public view: only allow-listed columns, never wishlist items. Of the photo record only the
+ * render's version is read — and only when the owner chose to show the render.
+ */
 export async function listPublicShelf(): Promise<PublicShelfPerfume[]> {
   const rows = await getSql()`
-    SELECT id, name, brand, concentration, status, rating, favorite, details, bottle
+    SELECT id, name, brand, concentration, status, rating, favorite, details, bottle,
+      CASE WHEN photo->>'display' = 'render' AND photo->'render'->>'pathname' IS NOT NULL
+        THEN photo->'render'->>'updatedAt' END AS render_version
     FROM shelf_perfumes
     WHERE status <> 'wishlist'
     ORDER BY lower(brand), lower(name)`;
   return rows.map(toPublicPerfume);
+}
+
+/** Storage path of a render the public page may show (same rules as listPublicShelf), else null. */
+export async function getPublicRenderPath(id: string): Promise<string | null> {
+  const rows = await getSql()`
+    SELECT photo->'render'->>'pathname' AS pathname
+    FROM shelf_perfumes
+    WHERE id = ${id} AND status <> 'wishlist' AND photo->>'display' = 'render'`;
+  const pathname = rows[0]?.pathname;
+  return typeof pathname === "string" && pathname ? pathname : null;
 }
 
 export interface NewShelfPerfume {

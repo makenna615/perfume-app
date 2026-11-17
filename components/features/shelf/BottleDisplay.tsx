@@ -1,4 +1,4 @@
-import type { BottleSpec, ShelfPhoto, ShelfStatus } from "@/types";
+import type { BottleSpec, PublicShelfPhoto, ShelfPhoto, ShelfStatus } from "@/types";
 import BottleIllustration from "@/components/features/shelf/BottleIllustration";
 
 type Size = "shelf" | "card" | "hero";
@@ -12,7 +12,7 @@ const SIZES: Record<Size, { stage: string; height: string; bottle: string; photo
 interface BottleDisplayProps {
   bottle: BottleSpec;
   status: ShelfStatus;
-  photo?: ShelfPhoto;
+  photo?: ShelfPhoto | PublicShelfPhoto;
   size?: Size;
   label: string;
 }
@@ -23,7 +23,7 @@ function Visual({ bottle, status, photo, size, label, decorative = false }: Bott
   if (photo?.display === "render" && photo.renderSrc) {
     // AI studio render: transparent background, so it stands in the niche as a true cut-out.
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- private, already-resized image served by our own authenticated route
+      // eslint-disable-next-line @next/next/no-img-element -- already-resized image served by our own route
       <img
         src={photo.renderSrc}
         alt={decorative ? "" : label}

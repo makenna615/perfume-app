@@ -3,6 +3,8 @@ import { authCookieName, verifySessionToken } from "@/lib/auth/session";
 
 // Exact-match public pages. /collection is the read-only public shelf (no APIs, no AI).
 const PUBLIC_PATHS = new Set(["/login", "/collection"]);
+// Public bottle renders: exactly /collection/render/<uuid> (the route re-checks visibility).
+const PUBLIC_RENDER = /^\/collection\/render\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Only Next's own build assets and the app icons (exact paths) skip the login check.
 // (A broad "any path ending in .js/.css/.txt…" rule is easy to abuse to skip auth.)
@@ -15,7 +17,7 @@ function isStaticAsset(pathname: string): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  if (PUBLIC_PATHS.has(pathname) || isStaticAsset(pathname)) {
+  if (PUBLIC_PATHS.has(pathname) || PUBLIC_RENDER.test(pathname) || isStaticAsset(pathname)) {
     return NextResponse.next();
   }
 

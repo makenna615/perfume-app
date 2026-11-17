@@ -53,7 +53,7 @@ Lookups check Fragrantica first, then the model's own knowledge, and only then r
 
 ### A full-stack shelf with a privacy-safe public page
 - Postgres database with versioned migrations and rules enforced in the database itself.
-- The public collection reads from a query that only selects approved fields, so private notes, bottle sizes, wishlist items and photos can't leak — even by accident.
+- The public collection reads from a query that only selects approved fields, so private notes, bottle sizes, wishlist items and the original product photos can't leak — even by accident. Visitors see only the AI renders, served through a separate public route that re-checks what may be shown.
 - Product photos are found on brand and retailer sites, cropped to the bottle, stored privately, and turned into consistent upright studio renders by an image model.
 
 ![My private shelf with AI studio renders](docs/screenshots/shelf.jpg)
